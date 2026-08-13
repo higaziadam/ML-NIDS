@@ -229,8 +229,8 @@ For issues, questions, or suggestions, please open an [GitHub Issue](https://git
 
 ## Authors
 
-- Your Name ([@yourhandle](https://github.com/yourhandle))
+- Adam Higazi
 
 ---
 
-**Last Updated**: August 2024
+**Last Updated**: August 2026
