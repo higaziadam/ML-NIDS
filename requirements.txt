@@ -1,0 +1,18 @@
+# Core runtime dependencies.  These ranges support the project on modern
+# Python versions, including the Python 3.14 environment used for development.
+numpy>=2.3
+pandas>=2.3
+scikit-learn>=1.7
+scipy>=1.16
+pyarrow>=18
+
+# Data exploration and configuration helpers
+matplotlib>=3.9
+seaborn>=0.13
+python-dotenv>=1.0
+pyyaml>=6.0
+tqdm>=4.66
+
+# Optional runtime feature used by src.utils.balance_dataset
+imbalanced-learn>=0.14
+xgboost>=2.1
