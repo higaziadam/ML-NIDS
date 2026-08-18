@@ -44,3 +44,53 @@ split paths unless `--overwrite` is explicitly supplied. Do not use
 Each saved run writes `<model_name>_metadata.json` beside the artifact. It
 records source/profile checksums, selected threshold, split row counts, package
 versions, and the Git commit.
+
+## Final holdout and cross-validation workflow
+
+Use this workflow only with a new, single labeled source dataset. Do not combine
+or re-split earlier experiment outputs after observing their metrics.
+
+First create a source dataset without learned preprocessing. This can require
+substantial disk space because the CICIDS2018 source is large:
+
+```powershell
+.\venv\Scripts\python.exe scripts\prepare_kaggle_data.py `
+  --single-source `
+  --output-file cicids2018_labeled.csv
+```
+
+Create one development/final-holdout split. The command refuses to replace an
+existing holdout unless `--overwrite` is supplied:
+
+```powershell
+.\venv\Scripts\python.exe -m src.validation create-holdout `
+  --data data\processed\cicids2018_labeled.csv `
+  --name v10_final_holdout `
+  --holdout-size 0.15
+```
+
+Run nested cross-validation on `development.csv` only. It fits preprocessing,
+feature selection, scaling, threshold selection, and the model separately in
+each fold; it never accesses `final_holdout.csv`:
+
+```powershell
+.\venv\Scripts\python.exe -m src.validation cross-validate `
+  --data data\final_holdout\v10_final_holdout\development.csv `
+  --config models\configs\xgb_v10_candidate.json `
+  --name xgb_v10_nested_cv `
+  --folds 5
+```
+
+Only after deciding that the cross-validation results are acceptable should you
+run the frozen V10 artifact against `final_holdout.csv` once:
+
+```powershell
+.\venv\Scripts\python.exe -m src.validation final-evaluate `
+  --data data\final_holdout\v10_final_holdout\final_holdout.csv `
+  --model models\saved\xgb_v10_regularized_fine_threshold.pkl `
+  --config models\configs\xgb_v10_candidate.json `
+  --name xgb_v10_final_holdout
+```
+
+For a strictly unbiased final score, the source used for this final holdout must
+not have contributed to V10's earlier training or experiment comparisons.

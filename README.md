@@ -7,6 +7,10 @@ A machine learning-powered Network Intrusion Detection System (NIDS) for detecti
 > implemented yet. The frozen XGBoost V10 release candidate is documented in
 > [RELEASE_V10.md](RELEASE_V10.md).
 
+> **Evaluation workflow:** use `python -m src.validation create-holdout`,
+> `cross-validate`, and `final-evaluate` for single-split final evaluation.
+> See [RELEASE_V10.md](RELEASE_V10.md) for the exact commands and safeguards.
+
 ## Features
 
 - **Anomaly Detection**: Identify suspicious network traffic patterns

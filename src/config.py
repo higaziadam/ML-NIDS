@@ -18,11 +18,13 @@ DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 SPLITS_DIR = DATA_DIR / "splits"
+FINAL_HOLDOUT_DIR = DATA_DIR / "final_holdout"
 
 # Create directories if they don't exist
 RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
 PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
 SPLITS_DIR.mkdir(parents=True, exist_ok=True)
+FINAL_HOLDOUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ============================================================================
 # MODEL PATHS
@@ -217,6 +219,7 @@ CONFIG = {
         "raw_data_dir": RAW_DATA_DIR,
         "processed_data_dir": PROCESSED_DATA_DIR,
         "splits_dir": SPLITS_DIR,
+        "final_holdout_dir": FINAL_HOLDOUT_DIR,
         "models_dir": MODELS_DIR,
         "saved_models_dir": SAVED_MODELS_DIR,
         "model_configs_dir": MODEL_CONFIGS_DIR,

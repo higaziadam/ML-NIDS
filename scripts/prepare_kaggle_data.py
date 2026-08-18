@@ -72,13 +72,30 @@ class KaggleDataProcessor:
             logger.warning("No label column found")
             return df
         
-        # Convert to binary: Benign=0, Others=1
+        # Convert to binary: Benign=0, Others=1, and expose the stable label
+        # column required by the training and validation commands.
+        df = df.copy()
         df[label_col] = df[label_col].apply(
             lambda x: 0 if 'benign' in str(x).lower() else 1
         )
+        if label_col != "label":
+            df = df.rename(columns={label_col: "label"})
         
-        logger.info(f"Label distribution:\n{df[label_col].value_counts()}")
+        logger.info(f"Label distribution:\n{df['label'].value_counts()}")
         
+        return df
+
+    def prepare_single_source(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Return one labeled source dataset without learned preprocessing.
+
+        Splitting, duplicate removal, feature selection, and scaling are deferred
+        to the training or validation workflow. This prevents a preparation step
+        from learning information from a final holdout partition.
+        """
+        if "label" not in df.columns:
+            raise ValueError("The standardized dataset must contain a 'label' column.")
+        if df["label"].nunique() != 2:
+            raise ValueError("The source dataset must contain both benign and attack labels.")
         return df
     
     def prepare_for_training(
@@ -148,6 +165,9 @@ class KaggleDataProcessor:
         output_dir: Path = None,
         test_split: float = 0.2,
         normalize: bool = True,
+        single_source: bool = False,
+        output_file: str = "cicids2018_labeled.csv",
+        overwrite: bool = False,
     ) -> None:
         """Process all data and save to disk."""
         if output_dir is None:
@@ -165,7 +185,23 @@ class KaggleDataProcessor:
             # Standardize labels
             df = self.standardize_labels(df)
             
-            # Prepare
+            if single_source:
+                source = self.prepare_single_source(df)
+                source_path = output_dir / output_file
+                if source_path.exists() and not overwrite:
+                    raise FileExistsError(
+                        f"Refusing to overwrite existing source dataset: {source_path}. "
+                        "Choose a new --output-file or pass --overwrite."
+                    )
+                save_data(source, source_path)
+                logger.info(
+                    "Saved one labeled source dataset without learned preprocessing: "
+                    f"{source_path}"
+                )
+                return
+
+            # Legacy preparation path. Prefer --single-source with
+            # ``python -m src.validation create-holdout`` for new experiments.
             X_train, X_test, y_train, y_test = self.prepare_for_training(
                 df,
                 test_split=test_split,
@@ -219,6 +255,22 @@ def main():
         default=False,
         help="Normalize with parameters fitted only on the training split (default: disabled)"
     )
+    parser.add_argument(
+        "--single-source",
+        action="store_true",
+        help="Save one labeled source dataset; defer all learned processing and splitting"
+    )
+    parser.add_argument(
+        "--output-file",
+        type=str,
+        default="cicids2018_labeled.csv",
+        help="Output filename used with --single-source"
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Explicitly allow replacement of an existing single-source dataset"
+    )
     
     args = parser.parse_args()
     
@@ -227,6 +279,9 @@ def main():
         output_dir=args.output_dir,
         test_split=args.test_split,
         normalize=args.normalize,
+        single_source=args.single_source,
+        output_file=args.output_file,
+        overwrite=args.overwrite,
     )
 
 

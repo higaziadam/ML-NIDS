@@ -134,6 +134,8 @@ data/processed/*
 !data/processed/.gitkeep
 data/splits/*
 !data/splits/.gitkeep
+data/final_holdout/*
+!data/final_holdout/.gitkeep
 
 # Models
 models/saved/*
