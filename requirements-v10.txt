@@ -1,0 +1,8 @@
+# Frozen runtime for the V10 XGBoost release candidate.
+# Use Python 3.14.0 to match the recorded verification environment.
+numpy==2.5.2
+pandas==3.0.5
+scikit-learn==1.9.0
+scipy==1.18.0
+pyarrow==25.0.1
+xgboost==3.4.0

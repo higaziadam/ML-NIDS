@@ -1,6 +1,6 @@
 {
   "model_name": "xgb_v10_regularized_fine_threshold",
-  "status": "frozen_candidate",
+  "status": "release_candidate",
   "frozen_date": "2026-08-18",
   "dataset": {
     "name": "CICIDS2018",

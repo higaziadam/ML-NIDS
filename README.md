@@ -2,6 +2,11 @@
 
 A machine learning-powered Network Intrusion Detection System (NIDS) for detecting network anomalies and cyber attacks in real-time.
 
+> **Current status:** the implemented system is a batch-training and batch-
+> inference ML pipeline. A FastAPI service and Docker image have not been
+> implemented yet. The frozen XGBoost V10 release candidate is documented in
+> [RELEASE_V10.md](RELEASE_V10.md).
+
 ## Features
 
 - **Anomaly Detection**: Identify suspicious network traffic patterns

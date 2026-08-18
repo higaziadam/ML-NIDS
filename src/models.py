@@ -171,6 +171,9 @@ class XGBoostModel(BaseModel):
         scale_pos_weight: float = 1.0,
         n_jobs: int = -1,
         random_state: int = 42,
+        tree_method: str = "hist",
+        objective: str = "binary:logistic",
+        eval_metric: str = "logloss",
         **kwargs
     ):
         """
@@ -187,6 +190,9 @@ class XGBoostModel(BaseModel):
             scale_pos_weight: Positive-class weight for imbalanced data
             n_jobs: Native training threads (-1 uses all available cores)
             random_state: Random seed
+            tree_method: XGBoost tree-construction method
+            objective: XGBoost learning objective
+            eval_metric: XGBoost evaluation metric
         """
         super().__init__(model_type="xgboost")
         if XGBClassifier is None:
@@ -206,9 +212,9 @@ class XGBoostModel(BaseModel):
             scale_pos_weight=scale_pos_weight,
             n_jobs=n_jobs,
             random_state=random_state,
-            objective="binary:logistic",
-            eval_metric="logloss",
-            tree_method="hist",
+            objective=objective,
+            eval_metric=eval_metric,
+            tree_method=tree_method,
         )
 
         self.logger.info(f"XGBoost model initialized with {n_estimators} estimators")
