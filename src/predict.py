@@ -91,7 +91,9 @@ def make_predictions(
         Predictions, probabilities
     """
     if threshold is None:
-        threshold = CONFIG["inference"].get("prediction_threshold", 0.5)
+        threshold = model.get("threshold", CONFIG["inference"].get("prediction_threshold", 0.5)) if isinstance(model, dict) else CONFIG["inference"].get("prediction_threshold", 0.5)
+    if not 0.0 < threshold < 1.0:
+        raise ValueError("Prediction threshold must be between 0 and 1.")
     
     trained_model = model.get("model") if isinstance(model, dict) else model
     if trained_model is None:
@@ -99,15 +101,14 @@ def make_predictions(
     logger.info(f"Making predictions on {X.shape[0]} samples")
     
     with Timer("Inference"):
-        y_pred = trained_model.predict(X)
-        
-        if return_probabilities:
-            y_proba = trained_model.predict_proba(X)
-            # If 2D, extract positive class probabilities
-            if len(y_proba.shape) > 1 and y_proba.shape[1] > 1:
-                y_proba = y_proba[:, 1]
-        else:
-            y_proba = None
+        probabilities = trained_model.predict_proba(X)
+        estimator = getattr(trained_model, "model", trained_model)
+        classes = np.asarray(getattr(estimator, "classes_", []))
+        if probabilities.ndim != 2 or probabilities.shape[1] != 2 or len(classes) != 2:
+            raise ValueError("Threshold-based inference requires a binary classifier with two probability columns.")
+        attack_probabilities = probabilities[:, 1]
+        y_pred = np.where(attack_probabilities >= threshold, classes[1], classes[0])
+        y_proba = attack_probabilities if return_probabilities else None
     
     logger.info(f"Predictions complete")
     

@@ -46,9 +46,9 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 # DATA CONFIGURATION
 # ============================================================================
 DATA_CONFIG = {
-    "train_size": 0.7,
-    "test_size": 0.2,
-    "val_size": 0.1,
+    "train_size": 0.70,
+    "test_size": 0.15,
+    "val_size": 0.15,
     "random_state": 42,
     "test_split_ratio": 0.8,  # 80% train, 20% test
     "val_split_ratio": 0.2,   # From train set
@@ -83,7 +83,7 @@ MODEL_CONFIG = {
     "hyperparameters": {
         # Random Forest
         "n_estimators": 300,
-        "max_depth": 20,
+        "max_depth": 10,
         "min_samples_split": 5,
         "min_samples_leaf": 2,
         "max_features": "sqrt",
@@ -109,7 +109,7 @@ MODEL_CONFIG = {
         "colsample_bytree": 0.8,
         "min_child_weight": 3.0,
         "reg_lambda": 1.0,
-        "scale_pos_weight": 3.8,
+        "scale_pos_weight": 1.10,
     },
 }
 
@@ -138,6 +138,15 @@ EVALUATION_CONFIG = {
     "compute_confusion_matrix": True,
     "plot_results": True,
     "save_results": True,
+}
+
+# Threshold selection uses validation data only.  The final test partition is
+# held back until a threshold has been selected.
+THRESHOLD_CONFIG = {
+    "candidates": [0.24, 0.25, 0.26, 0.27, 0.28, 0.29, 0.30, 0.31, 0.32, 0.33, 0.34, 0.35],
+    "min_recall": 0.92,
+    "max_fpr": 0.005,
+    "default": 0.50,
 }
 
 # ============================================================================
@@ -197,6 +206,7 @@ CONFIG = {
     "model": MODEL_CONFIG,
     "training": TRAINING_CONFIG,
     "evaluation": EVALUATION_CONFIG,
+    "threshold": THRESHOLD_CONFIG,
     "logging": LOGGING_CONFIG,
     "dataset": DATASET_CONFIG,
     "inference": INFERENCE_CONFIG,

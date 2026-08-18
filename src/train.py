@@ -7,7 +7,7 @@ preprocessing, feature engineering, model training, and evaluation.
 
 import argparse
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -17,7 +17,7 @@ from src.utils import logger, save_model, load_data, save_data, Timer, setup_log
 from src.data_preprocessing import DataCleaner, DataPreprocessor, preprocess_pipeline, DataSplitter
 from src.feature_extraction import feature_engineering_pipeline
 from src.models import create_model, ModelFactory
-from src.evaluate import comprehensive_evaluation
+from src.evaluate import comprehensive_evaluation, select_binary_threshold
 
 
 def load_training_data(
@@ -157,6 +157,40 @@ def engineer_features(
     return X_train_eng, X_test_eng
 
 
+def engineer_features_for_holdouts(
+    X_train: pd.DataFrame,
+    holdouts: Sequence[pd.DataFrame],
+    y_train: pd.Series,
+) -> Tuple[pd.DataFrame, list[pd.DataFrame]]:
+    """Fit feature engineering on training data and apply that schema to holdouts."""
+    X_train_eng, selected_features = feature_engineering_pipeline(
+        X_train, y_train,
+        create_interactions=False,
+        select_features=True,
+        n_features=CONFIG["features"].get("n_features", 20),
+        remove_correlated=True,
+        correlation_threshold=CONFIG["features"].get("correlation_threshold", 0.95),
+    )
+    feature_names = selected_features or X_train_eng.columns.tolist()
+    transformed = []
+    for data in holdouts:
+        missing = [column for column in feature_names if column not in data.columns]
+        if missing:
+            raise ValueError(f"Holdout data is missing engineered training features: {missing}")
+        transformed.append(data.loc[:, feature_names])
+    return X_train_eng, transformed
+
+
+def _binary_probabilities(model: object, X: np.ndarray) -> Tuple[np.ndarray, Any, Any]:
+    """Return positive-class probabilities and ordered classes for a binary model."""
+    probabilities = model.predict_proba(X)
+    estimator = getattr(model, "model", model)
+    classes = np.asarray(getattr(estimator, "classes_", []))
+    if probabilities.ndim != 2 or probabilities.shape[1] != 2 or len(classes) != 2:
+        raise ValueError("Threshold tuning requires a fitted binary classifier with two probability columns.")
+    return probabilities[:, 1], classes[0], classes[1]
+
+
 def train_model(
     X_train: np.ndarray,
     y_train: np.ndarray,
@@ -204,6 +238,7 @@ def evaluate_model(
     X_test: np.ndarray,
     y_test: np.ndarray,
     model_name: str = "model",
+    threshold: Optional[float] = None,
 ) -> dict:
     """
     Evaluate model.
@@ -219,18 +254,24 @@ def evaluate_model(
     """
     logger.info(f"Evaluating {model_name}")
     
-    # Predictions
-    y_pred = model.predict(X_test)
     y_pred_proba = model.predict_proba(X_test)
+    if threshold is None:
+        y_pred = model.predict(X_test)
+    else:
+        positive_probabilities, negative_class, positive_class = _binary_probabilities(model, X_test)
+        y_pred = np.where(positive_probabilities >= threshold, positive_class, negative_class)
     
     # Comprehensive evaluation
     results = comprehensive_evaluation(
         y_test,
         y_pred,
         y_pred_proba,
+        selected_threshold=threshold,
         save_results=CONFIG["evaluation"].get("save_results", True),
         results_path=SAVED_MODELS_DIR / f"{model_name}_results",
     )
+    if threshold is not None:
+        results["selected_threshold"] = threshold
     
     return results
 
@@ -239,9 +280,13 @@ def save_training_artifacts(
     model: object,
     preprocessor: DataPreprocessor,
     X_train: pd.DataFrame,
+    X_val: pd.DataFrame,
     X_test: pd.DataFrame,
     y_train: pd.Series,
+    y_val: pd.Series,
     y_test: pd.Series,
+    threshold: float,
+    threshold_results: pd.DataFrame,
     model_name: str = "model",
 ) -> None:
     """
@@ -250,9 +295,13 @@ def save_training_artifacts(
     Args:
         model: Trained model
         X_train: Training features
+        X_val: Validation features
         X_test: Test features
         y_train: Training labels
+        y_val: Validation labels
         y_test: Test labels
+        threshold: Threshold selected from validation data
+        threshold_results: Metrics for all validation threshold candidates
         model_name: Model name
     """
     logger.info("Saving training artifacts")
@@ -266,20 +315,30 @@ def save_training_artifacts(
             "model": model,
             "preprocessor": preprocessor,
             "feature_names": X_train.columns.tolist(),
+            "threshold": threshold,
+            "model_version": model_name,
+            "threshold_policy": CONFIG["threshold"].copy(),
         },
         model_path,
     )
     
     # Save datasets
-    splits_dir = SPLITS_DIR
+    # Keep each run's reproducibility splits separate instead of overwriting a
+    # previous experiment's train/test files.
+    splits_dir = SPLITS_DIR / model_name
     
     X_train_with_label = X_train.copy()
     X_train_with_label["label"] = y_train.values
     save_data(X_train_with_label, splits_dir / "train.csv")
+
+    X_val_with_label = X_val.copy()
+    X_val_with_label["label"] = y_val.values
+    save_data(X_val_with_label, splits_dir / "validation.csv")
     
     X_test_with_label = X_test.copy()
     X_test_with_label["label"] = y_test.values
     save_data(X_test_with_label, splits_dir / "test.csv")
+    save_data(threshold_results, SAVED_MODELS_DIR / f"{model_name}_results" / "threshold_selection.csv")
     
     logger.info(f"Training artifacts saved to {SAVED_MODELS_DIR}")
 
@@ -290,7 +349,7 @@ def train_pipeline(
     model_type: str = "random_forest",
     model_name: str = "nids_model",
     save_artifacts: bool = True,
-    test_size: float = 0.2,
+    test_size: Optional[float] = None,
 ) -> Tuple[object, dict]:
     """
     Complete training pipeline.
@@ -301,7 +360,8 @@ def train_pipeline(
         model_type: Type of model to train
         model_name: Name for saving artifacts
         save_artifacts: Save model and data splits
-        test_size: Test set proportion
+        test_size: Optional final-test proportion override. The configured
+            validation split is always retained.
         
     Returns:
         Trained model, evaluation results
@@ -315,18 +375,25 @@ def train_pipeline(
         # Split raw data first.  Every learned preprocessing operation below is
         # then fitted only on the training partition.
         splitter = DataSplitter()
+        configured_test_size = CONFIG["data"]["test_size"] if test_size is None else test_size
+        val_size = CONFIG["data"]["val_size"]
+        train_size = 1.0 - configured_test_size - val_size
         splits = splitter.split_data(
             X, y,
-            train_size=1.0 - test_size,
-            test_size=test_size,
-            val_size=0.0,  # No validation set for simplicity
+            train_size=train_size,
+            test_size=configured_test_size,
+            val_size=val_size,
             random_state=CONFIG["data"]["random_state"],
         )
         
         X_train_raw, y_train_raw = splits["train"]
+        X_val_raw, y_val_raw = splits["val"]
         X_test_raw, y_test_raw = splits["test"]
 
         X_train, y_train = preprocess_data(X_train_raw, y_train_raw)
+        X_val, y_val = preprocess_holdout_data(
+            X_val_raw, y_val_raw, X_train.columns.tolist(), X_train_raw
+        )
         X_test, y_test = preprocess_holdout_data(
             X_test_raw,
             y_test_raw,
@@ -334,8 +401,12 @@ def train_pipeline(
             X_train_raw,
         )
         
-        # Engineer features
-        X_train_eng, X_test_eng = engineer_features(X_train, X_test, y_train)
+        # Feature selection is fitted on training data only; validation and
+        # test data receive the exact same learned feature schema.
+        X_train_eng, holdout_features = engineer_features_for_holdouts(
+            X_train, [X_val, X_test], y_train
+        )
+        X_val_eng, X_test_eng = holdout_features
         
         # Fit one scaler on training features only, then use it for every later
         # split and for persisted inference.
@@ -343,19 +414,33 @@ def train_pipeline(
             method=CONFIG["data"].get("normalization_method", "minmax")
         )
         X_train_eng = inference_preprocessor.fit_transform(X_train_eng)
+        X_val_eng = inference_preprocessor.transform(X_val_eng)
         X_test_eng = inference_preprocessor.transform(X_test_eng)
 
         # Convert to numpy for model training
         X_train_np = X_train_eng.values if isinstance(X_train_eng, pd.DataFrame) else X_train_eng
         y_train_np = y_train.values if isinstance(y_train, pd.Series) else y_train
+        X_val_np = X_val_eng.values if isinstance(X_val_eng, pd.DataFrame) else X_val_eng
+        y_val_np = y_val.values if isinstance(y_val, pd.Series) else y_val
         X_test_np = X_test_eng.values if isinstance(X_test_eng, pd.DataFrame) else X_test_eng
         y_test_np = y_test.values if isinstance(y_test, pd.Series) else y_test
         
         # Train model
         model = train_model(X_train_np, y_train_np, model_type=model_type)
+
+        validation_probabilities, _, positive_class = _binary_probabilities(model, X_val_np)
+        selected_threshold, threshold_results = select_binary_threshold(
+            y_val_np,
+            validation_probabilities,
+            positive_class,
+            CONFIG["threshold"]["candidates"],
+            CONFIG["threshold"]["min_recall"],
+            CONFIG["threshold"]["max_fpr"],
+        )
+        logger.info(f"Selected validation threshold: {selected_threshold:.2f}")
         
-        # Evaluate
-        results = evaluate_model(model, X_test_np, y_test_np, model_name)
+        # Evaluate the chosen threshold once on the untouched test partition.
+        results = evaluate_model(model, X_test_np, y_test_np, model_name, threshold=selected_threshold)
         
         # Save artifacts
         if save_artifacts:
@@ -363,9 +448,13 @@ def train_pipeline(
                 model,
                 inference_preprocessor,
                 X_train_eng,
+                X_val_eng,
                 X_test_eng,
                 y_train,
+                y_val,
                 y_test,
+                selected_threshold,
+                threshold_results,
                 model_name,
             )
         
@@ -392,7 +481,7 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="random_forest",
+        default=CONFIG["model"]["model_type"],
         choices=ModelFactory.get_available_models(),
         help="Model type"
     )
@@ -405,8 +494,8 @@ def main():
     parser.add_argument(
         "--test-size",
         type=float,
-        default=0.2,
-        help="Test set proportion"
+        default=None,
+        help="Optional final-test proportion override; validation split is retained"
     )
     parser.add_argument(
         "--no-save",

@@ -222,6 +222,469 @@ Actual Attack           15,987               196,284
 
 ---
 
+### Experiment V4: XGBoost Recall Optimization
+
+**Date**: 2026-08-13
+**Model**: XGBoost
+**Dataset**: CICIDS2018, binary classification (0 = benign, 1 = attack)
+**Dataset Size**: 1,018,036 evaluation samples
+
+#### Results
+- Accuracy: 0.9801
+- Precision: 0.9835
+- Recall (attack): 0.9198
+- F1-Score: 0.9506
+- ROC-AUC: 0.9902
+- PR-AUC: 0.9779
+- Specificity: 0.9959
+- False Positive Rate: 0.0041
+- False Negative Rate: 0.0802
+
+#### Confusion Matrix
+
+```
+                 Predicted Benign    Predicted Attack
+Actual Benign          802,499                 3,266
+Actual Attack           17,014               195,257
+```
+
+#### Notes
+- This is an intermediate recall-versus-alert-volume operating point between
+  V2 and V3.
+- Compared with V2, it detected 678 additional attacks (17,014 versus 17,692
+  false negatives) but generated 1,545 additional false alerts (3,266 versus
+  1,721 false positives).
+- Compared with V3, it reduced false positives by 4,109 while accepting 1,027
+  more missed attacks.
+- V2 remains the best low-alert option; V4 is a reasonable compromise when a
+  modest recall increase is worth a false-positive rate of 0.41%.
+
+#### Model Location
+`models/saved/xgb_recall_v4.pkl`
+
+#### Evaluation Report
+`models/saved/xgb_recall_v4_results/metrics.csv`
+
+---
+
+### Experiment V5: Validation-Based Threshold Tuning
+
+**Status**: Completed.
+**Date**: 2026-08-13
+**Model**: XGBoost
+**Dataset**: CICIDS2018, binary classification (0 = benign, 1 = attack)
+
+#### Hyperparameters
+- n_estimators: 100
+- max_depth: 20
+- learning_rate: 0.1
+- subsample: 0.8
+- colsample_bytree: 0.8
+- min_child_weight: 1.0
+- reg_lambda: 1.0
+- scale_pos_weight: 1.0
+- random_state: 42
+- n_jobs: -1
+- tree_method: hist
+
+#### Methodology
+- Uses a stratified 70% training, 15% validation, and 15% final-test split.
+- Fits data cleaning decisions, feature selection, and MinMax scaling only on
+  training data; validation and test data use the saved training schema.
+- Trains XGBoost on the training partition, then evaluates attack-probability
+  thresholds of 0.40, 0.45, 0.50, and 0.55 on validation data.
+- Selects the highest threshold meeting recall >= 0.92 and false-positive rate
+  <= 0.5%; if none meet both targets, selects the best recall/FPR trade-off and
+  records that outcome.
+- Evaluates the selected threshold once on the untouched final test partition.
+- Persists the selected threshold, threshold policy, model version, fitted
+  preprocessor, and feature schema with the trained model artifact.
+
+#### Validation Threshold Selection
+
+| Threshold | Precision | Recall | False-Positive Rate | False Positives | False Negatives | Meets Targets |
+|---:|---:|---:|---:|---:|---:|:---:|
+| 0.40 | 0.9874 | 0.9178 | 0.0031 | 1,868 | 13,086 | No |
+| 0.45 | 0.9898 | 0.9166 | 0.0025 | 1,498 | 13,282 | No |
+| 0.50 | 0.9917 | 0.9157 | 0.0020 | 1,226 | 13,415 | No |
+| 0.55 | 0.9967 | 0.9112 | 0.0008 | 478 | 14,135 | No |
+
+No candidate met both the recall target (>= 0.92) and the FPR target (<= 0.5%).
+The workflow therefore selected **0.40**, the candidate with the highest
+validation recall and an FPR below the policy limit.
+
+#### Final Test Results
+- Selected threshold: 0.40
+- Accuracy: 0.9806
+- Precision: 0.9872
+- Recall (attack): 0.9189
+- F1-Score: 0.9518
+- ROC-AUC: 0.9905
+- PR-AUC: 0.9784
+- Specificity: 0.9969
+- False Positive Rate: 0.0031
+- False Negative Rate: 0.0811
+
+#### Confusion Matrix
+
+```
+                 Predicted Benign    Predicted Attack
+Actual Benign          602,421                 1,903
+Actual Attack           12,907               146,296
+```
+
+#### Notes
+- The validation decision generalizes closely to the untouched test split:
+  recall was 0.9178 on validation and 0.9189 on test, while FPR was 0.31% on
+  both splits.
+- V5 is a threshold-policy experiment, not a direct one-to-one comparison with
+  V1-V4, because it uses a different 70/15/15 split rather than an 80/20 split.
+- It did not reach the 92% recall target. The next iteration should broaden the
+  threshold candidates below 0.40 or adjust XGBoost training parameters, while
+  selecting against the same validation policy.
+
+#### Model Location
+`models/saved/xgb_v5_threshold_tuning.pkl`
+
+#### Evaluation Report
+`models/saved/xgb_v5_threshold_tuning_results/metrics.csv`
+
+---
+
+### Experiment V6: Expanded Threshold Search
+
+**Date**: 2026-08-13
+**Model**: XGBoost
+**Dataset**: CICIDS2018, binary classification (0 = benign, 1 = attack)
+
+#### Results
+- Selected threshold: 0.30
+- Accuracy: 0.9797
+- Precision: 0.9798
+- Recall (attack): 0.9214
+- F1-Score: 0.9497
+- ROC-AUC: 0.9905
+- PR-AUC: 0.9784
+- False Positive Rate: 0.0050
+- False Negative Rate: 0.0786
+
+#### Confusion Matrix
+
+```
+                 Predicted Benign    Predicted Attack
+Actual Benign          601,303                 3,021
+Actual Attack           12,513               146,690
+```
+
+#### Notes
+- Expanded threshold search identified 0.30 as the only tested validation
+  threshold meeting both policy targets: recall >= 0.92 and FPR <= 0.5%.
+- This is the first threshold-tuned run to satisfy the defined alert policy.
+
+#### Model Location
+`models/saved/xgb_v6_expanded_thresholds.pkl`
+
+#### Evaluation Report
+`models/saved/xgb_v6_expanded_thresholds_results/metrics.csv`
+
+---
+
+### Experiment V7: XGBoost Class-Weight Tuning
+
+**Date**: 2026-08-13
+**Model**: XGBoost
+**Dataset**: CICIDS2018, binary classification (0 = benign, 1 = attack)
+
+#### Changed Configuration
+- scale_pos_weight: 1.25 (V6 used 1.0)
+- All other XGBoost settings and the 70/15/15 threshold-tuning workflow were retained.
+
+#### Results
+- Selected threshold: 0.20
+- Accuracy: 0.9744
+- Precision: 0.9478
+- Recall (attack): 0.9284
+- F1-Score: 0.9380
+- ROC-AUC: 0.9905
+- PR-AUC: 0.9783
+- False Positive Rate: 0.0135
+- False Negative Rate: 0.0716
+
+#### Confusion Matrix
+
+```
+                 Predicted Benign    Predicted Attack
+Actual Benign          596,190                 8,134
+Actual Attack           11,398               147,805
+```
+
+#### Notes
+- Increasing class weight improved recall by 0.70 percentage points versus V6
+  and detected 1,115 additional attacks.
+- It increased false positives by 5,113 and failed the 0.5% FPR policy target.
+- Retain as a recall-focused comparison; V6 remains the preferred policy-compliant model.
+
+#### Model Location
+`models/saved/xgb_v7_scale_weight_125.pkl`
+
+#### Evaluation Report
+`models/saved/xgb_v7_scale_weight_125_results/metrics.csv`
+
+---
+
+### Experiment V8: Fine Threshold Search with Class Weight 1.25
+
+**Date**: 2026-08-13
+**Model**: XGBoost
+**Dataset**: CICIDS2018, binary classification (0 = benign, 1 = attack)
+
+#### Changed Configuration
+- Retained V7's `scale_pos_weight=1.25`.
+- Searched fine-grained validation thresholds from 0.30 to 0.35.
+
+#### Results
+- Selected threshold: 0.30
+- Accuracy: 0.9788
+- Precision: 0.9744
+- Recall (attack): 0.9226
+- F1-Score: 0.9478
+- ROC-AUC: 0.9905
+- PR-AUC: 0.9783
+- False Positive Rate: 0.0064
+- False Negative Rate: 0.0774
+
+#### Confusion Matrix
+
+```
+                 Predicted Benign    Predicted Attack
+Actual Benign          600,465                 3,859
+Actual Attack           12,319               146,884
+```
+
+#### Notes
+- Fine threshold search improved the V7 alert volume substantially, reducing
+  false positives from 8,134 to 3,859 while retaining recall above 92%.
+- No tested threshold met both policy targets. At 0.33, validation FPR was
+  0.522%—close to the 0.5% limit—but recall was 92.04%; at 0.35, FPR passed
+  at 0.488% but recall dropped to 91.99%.
+- V8 is close to policy compliance but does not outperform V6, which already
+  meets both targets with fewer false positives.
+
+#### Model Location
+`models/saved/xgb_v8_fine_threshold.pkl`
+
+#### Evaluation Report
+`models/saved/xgb_v8_fine_threshold_results/metrics.csv`
+
+---
+
+### Experiment V9: Regularized XGBoost (Depth 10)
+
+**Date**: 2026-08-13
+**Model**: XGBoost
+**Dataset**: CICIDS2018, binary classification (0 = benign, 1 = attack)
+
+#### Changed Configuration
+- n_estimators: 300
+- max_depth: 10
+- learning_rate: 0.05
+- min_child_weight: 3.0
+- scale_pos_weight: 1.0
+- Retained `subsample=0.8`, `colsample_bytree=0.8`, `reg_lambda=1.0`, and the
+  training-only preprocessing and 70/15/15 split workflow.
+
+#### Validation Threshold Selection
+
+| Threshold | Precision | Recall | False-Positive Rate | False Positives | False Negatives | Meets Targets |
+|---:|---:|---:|---:|---:|---:|:---:|
+| 0.30 | 0.9865 | 0.9189 | 0.0033 | 1,995 | 12,919 | No |
+| 0.31 | 0.9872 | 0.9187 | 0.0031 | 1,899 | 12,951 | No |
+| 0.32 | 0.9886 | 0.9181 | 0.0028 | 1,679 | 13,035 | No |
+| 0.33 | 0.9889 | 0.9179 | 0.0027 | 1,633 | 13,067 | No |
+| 0.34 | 0.9894 | 0.9176 | 0.0026 | 1,564 | 13,111 | No |
+| 0.35 | 0.9897 | 0.9175 | 0.0025 | 1,516 | 13,140 | No |
+
+None of the validation candidates reached the recall target of 0.92, so the
+fallback policy selected threshold **0.30** for its highest validation recall.
+
+#### Final Test Results
+- Selected threshold: 0.30
+- Accuracy: 0.9807
+- Precision: 0.9866
+- Recall (attack): 0.9201
+- F1-Score: 0.9522
+- ROC-AUC: 0.9906
+- PR-AUC: 0.9787
+- Specificity: 0.9967
+- False Positive Rate: 0.0033
+- False Negative Rate: 0.0799
+
+#### Confusion Matrix
+
+```
+                 Predicted Benign    Predicted Attack
+Actual Benign          602,328                 1,996
+Actual Attack           12,723               146,480
+```
+
+#### Notes
+- V9 improved on V6 in accuracy, precision, F1-score, ROC-AUC, PR-AUC, and
+  false-positive rate.
+- Compared with V6, it produced 1,025 fewer false alerts (1,996 versus 3,021)
+  while missing 210 additional attacks (12,723 versus 12,513).
+- The final test recall exceeded 0.92, but the threshold was selected from
+  validation data where it narrowly missed the recall target; therefore V9 is
+  promising but not strictly policy-compliant under the predeclared selection
+  rule. Retain V6 as the policy-compliant reference.
+
+#### Model Location
+`models/saved/xgb_v9_regularized_depth10.pkl`
+
+#### Evaluation Report
+`models/saved/xgb_v9_regularized_depth10_results/metrics.csv`
+
+---
+
+### Experiment V10: Regularized XGBoost Fine Threshold Selection
+
+**Date**: 2026-08-13
+**Model**: XGBoost
+**Dataset**: CICIDS2018, binary classification (0 = benign, 1 = attack)
+
+#### Changed Configuration
+- Retained V9's regularized model: `n_estimators=300`, `max_depth=10`,
+  `learning_rate=0.05`, `min_child_weight=3.0`, and `scale_pos_weight=1.0`.
+- Narrowed the validation threshold search to 0.24--0.30 to locate a
+  policy-compliant operating point near V9's boundary.
+- Retained training-only preprocessing and the stratified 70/15/15
+  train/validation/test split.
+
+#### Validation Threshold Selection
+
+| Threshold | Precision | Recall | False-Positive Rate | False Positives | False Negatives | Meets Targets |
+|---:|---:|---:|---:|---:|---:|:---:|
+| 0.24 | 0.9805 | 0.9210 | 0.0048 | 2,917 | 12,579 | Yes |
+| 0.25 | 0.9819 | 0.9205 | 0.0045 | 2,702 | 12,654 | Yes |
+| 0.26 | 0.9834 | 0.9200 | 0.0041 | 2,471 | 12,731 | Yes |
+| 0.27 | 0.9846 | 0.9196 | 0.0038 | 2,293 | 12,799 | No |
+| 0.28 | 0.9855 | 0.9193 | 0.0036 | 2,160 | 12,850 | No |
+| 0.29 | 0.9860 | 0.9190 | 0.0034 | 2,073 | 12,896 | No |
+| 0.30 | 0.9865 | 0.9189 | 0.0033 | 1,995 | 12,919 | No |
+
+Thresholds 0.24--0.26 met both validation targets (recall >= 0.92 and
+false-positive rate <= 0.005). Per the selection policy, threshold **0.26**
+was chosen because it is the highest qualifying threshold.
+
+#### Final Test Results
+- Selected threshold: 0.26
+- Accuracy: 0.9803
+- Precision: 0.9835
+- Recall (attack): 0.9211
+- F1-Score: 0.9513
+- ROC-AUC: 0.9906
+- PR-AUC: 0.9787
+- Specificity: 0.9959
+- False Positive Rate: 0.0041
+- False Negative Rate: 0.0789
+
+#### Confusion Matrix
+
+```
+                 Predicted Benign    Predicted Attack
+Actual Benign          601,868                 2,456
+Actual Attack           12,563               146,640
+```
+
+#### Notes
+- V10 is policy-compliant on validation data and confirms that the V9 model can
+  satisfy the recall and false-positive-rate requirements at threshold 0.26.
+- Compared with V6, V10 generated 565 fewer false alerts (2,456 versus 3,021)
+  while missing only 50 additional attacks (12,563 versus 12,513).
+- V10 improves accuracy, precision, F1-score, and false-positive rate over V6;
+  V6 retains a marginally higher attack recall. V10 is the preferred
+  policy-compliant low-alert candidate, subject to cross-validation and an
+  independent holdout evaluation.
+
+#### Model Location
+`models/saved/xgb_v10_regularized_fine_threshold.pkl`
+
+#### Evaluation Report
+`models/saved/xgb_v10_regularized_fine_threshold_results/metrics.csv`
+
+---
+
+### Experiment V11: Regularized XGBoost with Moderate Class Weight
+
+**Date**: 2026-08-13
+**Model**: XGBoost
+**Dataset**: CICIDS2018, binary classification (0 = benign, 1 = attack)
+
+#### Changed Configuration
+- Retained V10's regularized model: `n_estimators=300`, `max_depth=10`,
+  `learning_rate=0.05`, and `min_child_weight=3.0`.
+- Increased `scale_pos_weight` moderately from 1.0 to **1.10** to emphasize
+  attack samples without using V7's more aggressive weight of 1.25.
+- Searched validation thresholds from 0.24 to 0.35; retained the training-only
+  preprocessing and stratified 70/15/15 train/validation/test split.
+
+#### Validation Threshold Selection
+
+| Threshold | Precision | Recall | False-Positive Rate | False Positives | False Negatives | Meets Targets |
+|---:|---:|---:|---:|---:|---:|:---:|
+| 0.24 | 0.9777 | 0.9218 | 0.0055 | 3,344 | 12,450 | No |
+| 0.25 | 0.9790 | 0.9214 | 0.0052 | 3,146 | 12,512 | No |
+| 0.26 | 0.9810 | 0.9208 | 0.0047 | 2,837 | 12,607 | Yes |
+| 0.27 | 0.9824 | 0.9204 | 0.0043 | 2,619 | 12,680 | Yes |
+| 0.28 | 0.9835 | 0.9199 | 0.0041 | 2,458 | 12,747 | No |
+| 0.29 | 0.9845 | 0.9196 | 0.0038 | 2,299 | 12,806 | No |
+| 0.30 | 0.9853 | 0.9193 | 0.0036 | 2,180 | 12,843 | No |
+| 0.31 | 0.9861 | 0.9190 | 0.0034 | 2,063 | 12,888 | No |
+| 0.32 | 0.9867 | 0.9188 | 0.0033 | 1,966 | 12,927 | No |
+| 0.33 | 0.9872 | 0.9186 | 0.0031 | 1,901 | 12,967 | No |
+| 0.34 | 0.9886 | 0.9180 | 0.0028 | 1,681 | 13,058 | No |
+| 0.35 | 0.9890 | 0.9178 | 0.0027 | 1,623 | 13,082 | No |
+
+Thresholds 0.26 and 0.27 met both validation targets (recall >= 0.92 and
+false-positive rate <= 0.005). Per the selection policy, threshold **0.27**
+was chosen because it is the highest qualifying threshold.
+
+#### Final Test Results
+- Selected threshold: 0.27
+- Accuracy: 0.9802
+- Precision: 0.9826
+- Recall (attack): 0.9215
+- F1-Score: 0.9511
+- ROC-AUC: 0.9906
+- PR-AUC: 0.9787
+- Specificity: 0.9957
+- False Positive Rate: 0.0043
+- False Negative Rate: 0.0785
+
+#### Confusion Matrix
+
+```
+                 Predicted Benign    Predicted Attack
+Actual Benign          601,732                 2,592
+Actual Attack           12,504               146,699
+```
+
+#### Notes
+- V11 is policy-compliant: the selected threshold met both targets on
+  validation data and the independent test results also satisfy them.
+- Relative to V10, V11 detected 59 additional attacks (fewer false negatives)
+  but produced 136 more false alerts. Its validation recall margin above the
+  0.92 target is larger, while its false-positive-rate margin is smaller.
+- Choose V11 when slightly higher attack detection is worth a small increase
+  in alerts; retain V10 when minimizing false positives is the priority.
+
+#### Model Location
+`models/saved/xgb_v11_scale_weight_110.pkl`
+
+#### Evaluation Report
+`models/saved/xgb_v11_scale_weight_110_results/metrics.csv`
+
+---
+
 ## Performance Comparison
 
 | Version | Model Type | Accuracy | Precision | Recall | F1-Score | ROC-AUC | Date | Notes |
@@ -229,6 +692,14 @@ Actual Attack           15,987               196,284
 | V1 | Random Forest | 0.9798 | 0.9773 | 0.9243 | 0.9501 | 0.9893 | 2026-08-12 | Baseline; 0.56% false-positive rate |
 | V2 | XGBoost | 0.9809 | 0.9912 | 0.9167 | 0.9525 | 0.9905 | 2026-08-12 | Lowest FPR (0.21%); recall needs tuning |
 | V3 | XGBoost | 0.9771 | 0.9638 | 0.9247 | 0.9438 | 0.9900 | 2026-08-12 | Higher recall; FPR rose to 0.92% |
+| V4 | XGBoost | 0.9801 | 0.9835 | 0.9198 | 0.9506 | 0.9902 | 2026-08-13 | Balanced compromise; FPR 0.41% |
+| V5 | XGBoost | 0.9806 | 0.9872 | 0.9189 | 0.9518 | 0.9905 | 2026-08-13 | Threshold 0.40; 0.31% FPR; target recall not met |
+| V6 | XGBoost | 0.9797 | 0.9798 | 0.9214 | 0.9497 | 0.9905 | 2026-08-13 | Policy-compliant: threshold 0.30, FPR 0.50% |
+| V7 | XGBoost | 0.9744 | 0.9478 | 0.9284 | 0.9380 | 0.9905 | 2026-08-13 | Higher recall; FPR 1.35%, not compliant |
+| V8 | XGBoost | 0.9788 | 0.9744 | 0.9226 | 0.9478 | 0.9905 | 2026-08-13 | Fine search; FPR 0.64%, still not compliant |
+| V9 | XGBoost | 0.9807 | 0.9866 | 0.9201 | 0.9522 | 0.9906 | 2026-08-13 | Lowest FPR (0.33%); validation recall target narrowly missed |
+| V10 | XGBoost | 0.9803 | 0.9835 | 0.9211 | 0.9513 | 0.9906 | 2026-08-13 | Policy-compliant: threshold 0.26, FPR 0.41% |
+| V11 | XGBoost | 0.9802 | 0.9826 | 0.9215 | 0.9511 | 0.9906 | 2026-08-13 | Policy-compliant: threshold 0.27, FPR 0.43% |
 
 ---
 
@@ -254,5 +725,5 @@ Actual Attack           15,987               196,284
 
 ---
 
-**Last Updated**: 2026-08-12  
-**Total Experiments**: 3
+**Last Updated**: 2026-08-13
+**Total Experiments**: 11

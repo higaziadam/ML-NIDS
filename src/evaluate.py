@@ -25,6 +25,48 @@ from sklearn.preprocessing import label_binarize
 from src.utils import logger, save_data, Timer
 
 
+def select_binary_threshold(
+    y_true: np.ndarray,
+    positive_probabilities: np.ndarray,
+    positive_class: Any,
+    candidates: list[float],
+    min_recall: float,
+    max_fpr: float,
+) -> Tuple[float, pd.DataFrame]:
+    """Select a binary threshold from validation data under an alert policy."""
+    if not candidates or any(not 0.0 < threshold < 1.0 for threshold in candidates):
+        raise ValueError("Threshold candidates must be non-empty values between 0 and 1.")
+    y_true = np.asarray(y_true)
+    probabilities = np.asarray(positive_probabilities, dtype=float)
+    if y_true.ndim != 1 or probabilities.ndim != 1 or len(y_true) != len(probabilities):
+        raise ValueError("Validation labels and probabilities must be aligned 1D arrays.")
+    labels = np.unique(y_true)
+    if len(labels) != 2 or positive_class not in labels:
+        raise ValueError("Threshold selection requires two classes and a valid positive class.")
+    negative_class = next(label for label in labels if label != positive_class)
+    rows = []
+    for threshold in sorted(set(candidates)):
+        predictions = np.where(probabilities >= threshold, positive_class, negative_class)
+        tn, fp, fn, tp = confusion_matrix(y_true, predictions, labels=[negative_class, positive_class]).ravel()
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        fpr = fp / (fp + tn) if fp + tn else 0.0
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        rows.append({
+            "threshold": threshold, "precision": precision, "recall": recall, "fpr": fpr,
+            "false_positives": int(fp), "false_negatives": int(fn),
+            "meets_targets": recall >= min_recall and fpr <= max_fpr,
+        })
+    results = pd.DataFrame(rows)
+    eligible = results[results["meets_targets"]]
+    if not eligible.empty:
+        # Highest compliant threshold produces the fewest alerts.
+        selected = eligible.sort_values("threshold", ascending=False).iloc[0]
+    else:
+        logger.warning("No validation threshold met both recall and false-positive-rate targets.")
+        selected = results.sort_values(["recall", "fpr", "threshold"], ascending=[False, True, False]).iloc[0]
+    return float(selected["threshold"]), results
+
+
 class ModelEvaluator:
     """Evaluate model performance."""
     
@@ -253,6 +295,7 @@ def comprehensive_evaluation(
     y_true: np.ndarray,
     y_pred: np.ndarray,
     y_pred_proba: Optional[np.ndarray] = None,
+    selected_threshold: Optional[float] = None,
     save_results: bool = False,
     results_path: Optional[Path] = None,
 ) -> Dict[str, any]:
@@ -263,6 +306,7 @@ def comprehensive_evaluation(
         y_true: True labels
         y_pred: Predicted labels
         y_pred_proba: Predicted probabilities
+        selected_threshold: Decision threshold selected on validation data
         save_results: Save results to file
         results_path: Path to save results
         
@@ -275,6 +319,9 @@ def comprehensive_evaluation(
         # Evaluator
         evaluator = ModelEvaluator()
         results["metrics"] = evaluator.evaluate(y_true, y_pred, y_pred_proba)
+        if selected_threshold is not None:
+            evaluator.results["selected_threshold"] = selected_threshold
+            results["metrics"]["selected_threshold"] = selected_threshold
         evaluator.print_metrics()
         
         # Confusion matrix
