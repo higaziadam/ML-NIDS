@@ -1,0 +1,94 @@
+{
+  "model_name": "xgb_v10_regularized_fine_threshold",
+  "status": "frozen_candidate",
+  "frozen_date": "2026-08-18",
+  "dataset": {
+    "name": "CICIDS2018",
+    "task": "binary classification",
+    "label_mapping": {
+      "0": "benign",
+      "1": "attack"
+    }
+  },
+  "split": {
+    "train_size": 0.7,
+    "validation_size": 0.15,
+    "test_size": 0.15,
+    "random_state": 42,
+    "stratified": true
+  },
+  "preprocessing": {
+    "remove_duplicates": true,
+    "missing_value_strategy": "drop",
+    "outlier_removal": false,
+    "remove_constant_features": true,
+    "feature_selection": {
+      "method": "f_classif",
+      "n_features": 20,
+      "remove_correlated_features": true,
+      "correlation_threshold": 0.95
+    },
+    "normalization": {
+      "method": "minmax",
+      "fit_on_training_data_only": true
+    }
+  },
+  "model": {
+    "type": "xgboost",
+    "n_estimators": 300,
+    "max_depth": 10,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 3.0,
+    "reg_lambda": 1.0,
+    "scale_pos_weight": 1.0,
+    "random_state": 42,
+    "n_jobs": -1,
+    "tree_method": "hist",
+    "objective": "binary:logistic",
+    "eval_metric": "logloss"
+  },
+  "threshold_policy": {
+    "selected_threshold": 0.26,
+    "candidates": [0.24, 0.25, 0.26, 0.27, 0.28, 0.29, 0.3],
+    "minimum_recall": 0.92,
+    "maximum_false_positive_rate": 0.005,
+    "selection_rule": "Choose the highest validation threshold that meets both targets."
+  },
+  "validation_selection": {
+    "selected_threshold_recall": 0.9200329139526265,
+    "selected_threshold_false_positive_rate": 0.004088866237316406,
+    "policy_compliant": true
+  },
+  "test_metrics": {
+    "accuracy": 0.9803294448002494,
+    "precision": 0.9835273917475988,
+    "recall": 0.9210881704490493,
+    "f1": 0.9512843051712785,
+    "roc_auc": 0.9905697110885141,
+    "pr_auc": 0.9786566261315645,
+    "specificity": 0.9959359548851279,
+    "false_positive_rate": 0.004064045114872155,
+    "false_negative_rate": 0.07891182955095068,
+    "confusion_matrix": [[601868, 2456], [12563, 146640]]
+  },
+  "artifacts": {
+    "model_path": "models/saved/xgb_v10_regularized_fine_threshold.pkl",
+    "model_sha256": "8C736F8FD2327C1F555D69A89E977B0BE23335835D0932341672AB270BEE9D97",
+    "metrics_path": "models/saved/xgb_v10_regularized_fine_threshold_results/metrics.csv",
+    "threshold_selection_path": "models/saved/xgb_v10_regularized_fine_threshold_results/threshold_selection.csv"
+  },
+  "verification_environment": {
+    "python": "3.14.0",
+    "numpy": "2.5.2",
+    "pandas": "3.0.5",
+    "scikit_learn": "1.9.0",
+    "xgboost": "3.4.0"
+  },
+  "notes": [
+    "Selected as the lower-alert policy-compliant candidate after V1-V11 experiments.",
+    "The artifact contains the fitted preprocessor, ordered feature names, and selected threshold.",
+    "Verification environment records the environment used to inspect the artifact on 2026-08-18; it is not asserted to be the original training environment."
+  ]
+}
