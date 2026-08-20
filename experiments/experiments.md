@@ -745,7 +745,38 @@ Actual Attack           12,504               146,699
 `models/configs/xgb_v12_scale_weight_105_candidate.json`
 
 #### Status
-Planned — no training, cross-validation, or final-holdout metrics recorded yet.
+Rejected after development-data cross-validation — not evaluated on a final
+holdout.
+
+#### Fixed-Threshold Cross-Validation Results
+
+All five outer folds used the pre-registered threshold of `0.26`.
+
+| Metric | Mean | Standard Deviation |
+|---|---:|---:|
+| Accuracy | 0.9801 | 0.0002 |
+| Precision | 0.9823 | 0.0003 |
+| Recall (attack) | 0.9212 | 0.0008 |
+| F1-Score | 0.9508 | 0.0004 |
+| ROC-AUC | 0.9904 | 0.0001 |
+| PR-AUC | 0.9784 | 0.0002 |
+| False-Positive Rate | 0.00436 | 0.00008 |
+
+#### Comparison with Frozen V10
+
+- V12 increased mean attack recall by 0.03 percentage points (92.09% to
+  92.12%), or roughly 65 additional attacks detected per outer fold.
+- This trade-off added roughly 211 false alerts per outer fold: mean FPR rose
+  from 0.410% to 0.436%, while precision and F1-score both decreased.
+- Four of five folds met both policy targets. Fold 1 recall was 91.97%, so V12
+  still lacks a reliable recall margin above the 92.00% requirement.
+- The small recall gain does not justify the additional alert volume or reduced
+  FPR margin. V12 is rejected; it must not be evaluated on a final holdout.
+
+#### Evaluation Reports
+
+- `models/evaluation/xgb_v12_scale_weight_105_cv/fixed_threshold_summary.csv`
+- `models/evaluation/xgb_v12_scale_weight_105_cv/fixed_threshold_fold_metrics.csv`
 
 ---
 
@@ -764,6 +795,7 @@ Planned — no training, cross-validation, or final-holdout metrics recorded yet
 | V9 | XGBoost | 0.9807 | 0.9866 | 0.9201 | 0.9522 | 0.9906 | 2026-08-13 | Lowest FPR (0.33%); validation recall target narrowly missed |
 | V10 | XGBoost | 0.9803 | 0.9835 | 0.9211 | 0.9513 | 0.9906 | 2026-08-13 | Frozen threshold 0.26; final holdout FPR passed but recall was 91.91% |
 | V11 | XGBoost | 0.9802 | 0.9826 | 0.9215 | 0.9511 | 0.9906 | 2026-08-13 | Policy-compliant: threshold 0.27, FPR 0.43% |
+| V12 | XGBoost (5-fold CV) | 0.9801 | 0.9823 | 0.9212 | 0.9508 | 0.9904 | 2026-08-20 | Rejected: marginal recall gain; FPR increased to 0.44% |
 
 ---
 
