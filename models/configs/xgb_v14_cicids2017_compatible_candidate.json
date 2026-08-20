@@ -1,7 +1,8 @@
 {
   "model_name": "xgb_v14_cicids2017_compatible",
-  "status": "candidate",
+  "status": "release_candidate",
   "created_date": "2026-08-20",
+  "frozen_date": "2026-08-20",
   "parent_candidate": "xgb_v13_feature30",
   "dataset": {
     "name": "CICIDS2018 development with CIC-IDS2017 external evaluation",
@@ -39,6 +40,15 @@
     "selection_rule": "Choose the highest validation threshold that meets both targets. The fixed cross-dataset comparison threshold is 0.26."
   },
   "candidate_hypothesis": "A fixed 29-feature schema shared by CICIDS2018 and CIC-IDS2017 can preserve low-alert attack detection while enabling documented cross-dataset evaluation.",
+  "cross_validation_evidence": {
+    "all_fixed_threshold_outer_folds_policy_compliant": true,
+    "mean_recall": 0.9215020832715821,
+    "mean_false_positive_rate": 0.0035141742462226075,
+    "mean_precision": 0.9857306788856942,
+    "mean_f1": 0.9525348011071127,
+    "mean_roc_auc": 0.9912989789250096,
+    "mean_pr_auc": 0.9801584112648181
+  },
   "evaluation_protocol": [
     "Use CICIDS2018 train_data.csv only for candidate cross-validation and configuration decisions.",
     "Use CIC-IDS2017 labels only after the V14 configuration and threshold are frozen.",
@@ -46,6 +56,7 @@
   ],
   "notes": [
     "V14 removes only Protocol from V13's 30-feature schema because CIC-IDS2017 CSV exports do not provide it.",
-    "This is a candidate specification, not a trained artifact or a release."
+    "The configuration and threshold are frozen after development-only cross-validation.",
+    "CIC-IDS2017 evaluation will be reported as cross-dataset evaluation."
   ]
 }

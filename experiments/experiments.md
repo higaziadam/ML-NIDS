@@ -945,8 +945,31 @@ SHA-256: `CDE4E1A9439D7B9F5B96150E5EF838FC4B9C3012C85DD7843B798EA437ED7054`
 `models/configs/xgb_v14_cicids2017_compatible_candidate.json`
 
 #### Status
-Planned — no V14 training, cross-validation, or CIC-IDS2017 evaluation metrics
-recorded yet.
+Frozen for cross-dataset evaluation after development-only cross-validation.
+
+#### Fixed-Threshold Cross-Validation Results
+
+All five outer folds used threshold `0.26` and met both policy targets.
+
+| Metric | Mean | Standard Deviation |
+|---|---:|---:|
+| Accuracy | 0.9809 | 0.0002 |
+| Precision | 0.9857 | 0.0004 |
+| Recall (attack) | 0.9215 | 0.0007 |
+| F1-Score | 0.9525 | 0.0005 |
+| ROC-AUC | 0.9913 | 0.0001 |
+| PR-AUC | 0.9802 | 0.0002 |
+| False-Positive Rate | 0.00351 | 0.00011 |
+
+#### Notes
+- V14 retains cross-validation policy compliance after removing `Protocol`.
+- Compared with V13, recall decreased by only 0.01 percentage points while FPR
+  decreased from 0.362% to 0.351%.
+- Train the frozen V14 artifact, then run the one-time CIC-IDS2017 cross-dataset
+  evaluation. Do not alter V14 after that evaluation.
+
+#### Evaluation Report
+`models/evaluation/xgb_v14_cicids2017_compatible_cv/fixed_threshold_summary.csv`
 
 ---
 
@@ -967,6 +990,7 @@ recorded yet.
 | V11 | XGBoost | 0.9802 | 0.9826 | 0.9215 | 0.9511 | 0.9906 | 2026-08-13 | Policy-compliant: threshold 0.27, FPR 0.43% |
 | V12 | XGBoost (5-fold CV) | 0.9801 | 0.9823 | 0.9212 | 0.9508 | 0.9904 | 2026-08-20 | Rejected: marginal recall gain; FPR increased to 0.44% |
 | V13 | XGBoost (5-fold CV) | 0.9808 | 0.9853 | 0.9216 | 0.9524 | 0.9914 | 2026-08-20 | Frozen candidate; all fixed-threshold folds policy-compliant, FPR 0.36% |
+| V14 | XGBoost (5-fold CV) | 0.9809 | 0.9857 | 0.9215 | 0.9525 | 0.9913 | 2026-08-20 | Frozen for CIC-IDS2017 cross-dataset evaluation; FPR 0.35% |
 
 ---
 
