@@ -110,7 +110,11 @@ def test_nested_cross_validation_writes_summary_without_final_holdout(tmp_path) 
     )
 
     summary = pd.read_csv(output_dir / "summary.csv")
+    fixed_summary = pd.read_csv(output_dir / "fixed_threshold_summary.csv")
+    fixed_folds = pd.read_csv(output_dir / "fixed_threshold_fold_metrics.csv")
     metadata = json.loads((output_dir / "metadata.json").read_text(encoding="utf-8"))
     assert {"recall", "fpr"}.issubset(summary["metric"])
+    assert {"recall", "fpr"}.issubset(fixed_summary["metric"])
+    assert set(fixed_folds["frozen_profile_threshold"]) == {0.5}
     assert metadata["workflow"] == "nested_stratified_cross_validation"
     assert metadata["final_holdout_accessed"] is False

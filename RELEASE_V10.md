@@ -81,6 +81,18 @@ each fold; it never accesses `final_holdout.csv`:
   --folds 5
 ```
 
+Each nested-CV run now writes two outer-fold reports:
+
+- `summary.csv`: performance when each fold chooses its own threshold from its
+  inner validation data. This evaluates the threshold-selection procedure.
+- `fixed_threshold_summary.csv`: performance when every outer fold uses V10's
+  frozen threshold of `0.26`. This evaluates the exact operating point used by
+  the saved V10 artifact.
+
+Use the fixed-threshold report when deciding whether the frozen V10 operating
+threshold has enough recall and false-positive-rate margin. It does not tune
+the threshold and it does not access the final holdout.
+
 Only after deciding that the cross-validation results are acceptable should you
 run the frozen V10 artifact against `final_holdout.csv` once:
 

@@ -6,7 +6,7 @@ import argparse
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
@@ -127,8 +127,8 @@ def _fit_fold(
     X_outer_test_raw: pd.DataFrame,
     y_outer_test_raw: pd.Series,
     runtime_config: Mapping[str, Any],
-) -> dict[str, Any]:
-    """Fit one nested-CV fold and evaluate only on its outer test partition."""
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Fit one fold and score both selected and frozen operating thresholds."""
     X_train, y_train = preprocess_data(X_train_raw, y_train_raw, runtime_config)
     X_val, y_val = preprocess_holdout_data(
         X_val_raw, y_val_raw, X_train.columns.tolist(), X_train_raw, runtime_config
@@ -165,22 +165,57 @@ def _fit_fold(
         runtime_config["threshold"]["max_fpr"],
     )
     outer_probabilities, _, _ = _binary_probabilities(model, X_outer_test_np)
-    outer_predictions = np.where(outer_probabilities >= threshold, positive_class, negative_class)
-    metrics = ModelEvaluator().evaluate(
-        y_outer_test.to_numpy(),
-        outer_predictions,
-        model.predict_proba(X_outer_test_np),
-    )
+    outer_probability_matrix = model.predict_proba(X_outer_test_np)
+
+    def evaluate_outer_threshold(operating_threshold: float) -> dict[str, Any]:
+        outer_predictions = np.where(
+            outer_probabilities >= operating_threshold, positive_class, negative_class
+        )
+        metrics = ModelEvaluator().evaluate(
+            y_outer_test.to_numpy(), outer_predictions, outer_probability_matrix
+        )
+        metrics.update(
+            {
+                "selected_threshold": operating_threshold,
+                "outer_policy_compliant": bool(
+                    metrics["recall"] >= runtime_config["threshold"]["min_recall"]
+                    and metrics["fpr"] <= runtime_config["threshold"]["max_fpr"]
+                ),
+            }
+        )
+        return metrics
+
+    selected_metrics = evaluate_outer_threshold(threshold)
+    frozen_threshold = runtime_config["threshold"]["default"]
+    fixed_metrics = evaluate_outer_threshold(frozen_threshold)
     selected_validation = threshold_table.loc[threshold_table["threshold"] == threshold].iloc[0]
-    metrics.update(
+    selected_metrics.update(
         {
-            "selected_threshold": threshold,
             "validation_recall": float(selected_validation["recall"]),
             "validation_fpr": float(selected_validation["fpr"]),
             "validation_policy_compliant": bool(selected_validation["meets_targets"]),
         }
     )
-    return metrics
+    fixed_metrics["frozen_profile_threshold"] = frozen_threshold
+    return selected_metrics, fixed_metrics
+
+
+def _metric_summary(metrics: pd.DataFrame) -> pd.DataFrame:
+    """Summarize outer-fold metrics as mean and sample standard deviation."""
+    metric_columns = [
+        "accuracy", "precision", "recall", "f1", "roc_auc", "pr_auc", "specificity", "fpr", "fnr"
+    ]
+    return pd.DataFrame(
+        [
+            {
+                "metric": metric,
+                "mean": metrics[metric].mean(),
+                "std": metrics[metric].std(ddof=1),
+            }
+            for metric in metric_columns
+            if metric in metrics
+        ]
+    )
 
 
 def cross_validate_release_profile(
@@ -212,7 +247,8 @@ def cross_validate_release_profile(
     inner_validation_size = runtime_config["data"]["val_size"] / (
         runtime_config["data"]["train_size"] + runtime_config["data"]["val_size"]
     )
-    fold_rows = []
+    selected_fold_rows = []
+    fixed_fold_rows = []
     for fold_number, (outer_train_idx, outer_test_idx) in enumerate(outer_cv.split(X, y), start=1):
         X_outer_train = X.iloc[outer_train_idx]
         y_outer_train = y.iloc[outer_train_idx]
@@ -223,7 +259,7 @@ def cross_validate_release_profile(
             random_state=runtime_config["data"]["random_state"] + fold_number,
             stratify=y_outer_train,
         )
-        fold_metrics = _fit_fold(
+        selected_metrics, fixed_metrics = _fit_fold(
             X_inner_train,
             y_inner_train,
             X_inner_val,
@@ -232,27 +268,18 @@ def cross_validate_release_profile(
             y.iloc[outer_test_idx],
             runtime_config,
         )
-        fold_metrics["fold"] = fold_number
-        fold_rows.append(fold_metrics)
+        selected_metrics["fold"] = fold_number
+        fixed_metrics["fold"] = fold_number
+        selected_fold_rows.append(selected_metrics)
+        fixed_fold_rows.append(fixed_metrics)
         logger.info(f"Completed nested CV fold {fold_number}/{folds}")
 
-    fold_metrics_frame = pd.DataFrame(fold_rows)
-    metric_columns = [
-        "accuracy", "precision", "recall", "f1", "roc_auc", "pr_auc", "specificity", "fpr", "fnr"
-    ]
-    summary = pd.DataFrame(
-        [
-            {
-                "metric": metric,
-                "mean": fold_metrics_frame[metric].mean(),
-                "std": fold_metrics_frame[metric].std(ddof=1),
-            }
-            for metric in metric_columns
-            if metric in fold_metrics_frame
-        ]
-    )
-    save_data(fold_metrics_frame, output_dir / "fold_metrics.csv")
-    save_data(summary, output_dir / "summary.csv")
+    selected_fold_metrics = pd.DataFrame(selected_fold_rows)
+    fixed_fold_metrics = pd.DataFrame(fixed_fold_rows)
+    save_data(selected_fold_metrics, output_dir / "fold_metrics.csv")
+    save_data(_metric_summary(selected_fold_metrics), output_dir / "summary.csv")
+    save_data(fixed_fold_metrics, output_dir / "fixed_threshold_fold_metrics.csv")
+    save_data(_metric_summary(fixed_fold_metrics), output_dir / "fixed_threshold_summary.csv")
     _write_json(
         output_dir / "metadata.json",
         {
@@ -264,7 +291,11 @@ def cross_validate_release_profile(
             "release_profile_sha256": sha256_file(profile_path),
             "folds": folds,
             "all_validation_thresholds_policy_compliant": bool(
-                fold_metrics_frame["validation_policy_compliant"].all()
+                selected_fold_metrics["validation_policy_compliant"].all()
+            ),
+            "frozen_profile_threshold": runtime_config["threshold"]["default"],
+            "all_fixed_threshold_outer_folds_policy_compliant": bool(
+                fixed_fold_metrics["outer_policy_compliant"].all()
             ),
             "final_holdout_accessed": False,
         },
