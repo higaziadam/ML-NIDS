@@ -246,6 +246,16 @@ def train_model(
     return model
 
 
+def resolve_operating_threshold(
+    validation_selected_threshold: float,
+    frozen_profile_threshold: Optional[float] = None,
+) -> float:
+    """Use a frozen profile threshold when producing an immutable artifact."""
+    if frozen_profile_threshold is not None:
+        return float(frozen_profile_threshold)
+    return float(validation_selected_threshold)
+
+
 def evaluate_model(
     model: object,
     X_test: np.ndarray,
@@ -448,6 +458,7 @@ def train_pipeline(
     test_size: Optional[float] = None,
     runtime_config: Mapping[str, Any] = CONFIG,
     release_profile_path: Optional[str] = None,
+    frozen_profile_threshold: Optional[float] = None,
     overwrite: bool = False,
 ) -> Tuple[object, dict]:
     """
@@ -463,6 +474,7 @@ def train_pipeline(
             validation split is always retained.
         runtime_config: Effective configuration for this run.
         release_profile_path: Frozen release profile used for this run, if any.
+        frozen_profile_threshold: Fixed threshold required by a frozen profile.
         overwrite: Allow replacement of existing artifact paths.
         
     Returns:
@@ -539,7 +551,7 @@ def train_pipeline(
         )
 
         validation_probabilities, _, positive_class = _binary_probabilities(model, X_val_np)
-        selected_threshold, threshold_results = select_binary_threshold(
+        validation_selected_threshold, threshold_results = select_binary_threshold(
             y_val_np,
             validation_probabilities,
             positive_class,
@@ -547,7 +559,17 @@ def train_pipeline(
             runtime_config["threshold"]["min_recall"],
             runtime_config["threshold"]["max_fpr"],
         )
-        logger.info(f"Selected validation threshold: {selected_threshold:.2f}")
+        selected_threshold = resolve_operating_threshold(
+            validation_selected_threshold, frozen_profile_threshold
+        )
+        if frozen_profile_threshold is None:
+            logger.info(f"Selected validation threshold: {selected_threshold:.2f}")
+        else:
+            logger.info(
+                "Using frozen profile threshold: %.2f (validation selection was %.2f)",
+                selected_threshold,
+                validation_selected_threshold,
+            )
         
         # Evaluate the chosen threshold once on the untouched test partition.
         results = evaluate_model(
@@ -642,12 +664,15 @@ def main():
 
     runtime_config: Mapping[str, Any] = CONFIG
     release_profile_path = None
+    frozen_profile_threshold = None
     profile = None
     if args.config:
         profile_path = Path(args.config)
         profile = load_release_profile(profile_path)
         runtime_config = runtime_config_from_profile(profile, CONFIG)
         release_profile_path = str(profile_path)
+        if profile["status"] in {"release_candidate", "released"}:
+            frozen_profile_threshold = profile["threshold_policy"]["selected_threshold"]
         if args.model and args.model != runtime_config["model"]["model_type"]:
             parser.error("--model must match the immutable release profile model type.")
         if args.test_size is not None:
@@ -666,6 +691,7 @@ def main():
         test_size=args.test_size,
         runtime_config=runtime_config,
         release_profile_path=release_profile_path,
+        frozen_profile_threshold=frozen_profile_threshold,
         overwrite=args.overwrite,
     )
     

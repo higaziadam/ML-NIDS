@@ -836,7 +836,43 @@ All five outer folds used the pre-registered threshold of `0.26`.
 `models/configs/xgb_v13_feature30_candidate.json`
 
 #### Status
-Planned — no training, cross-validation, or final-holdout metrics recorded yet.
+Frozen release candidate after development-only cross-validation; not evaluated
+on a final holdout.
+
+#### Fixed-Threshold Cross-Validation Results
+
+All five outer folds used the frozen threshold of `0.26` and met both policy
+targets (recall >= 0.92 and FPR <= 0.005).
+
+| Metric | Mean | Standard Deviation |
+|---|---:|---:|
+| Accuracy | 0.9808 | 0.0002 |
+| Precision | 0.9853 | 0.0002 |
+| Recall (attack) | 0.9216 | 0.0007 |
+| F1-Score | 0.9524 | 0.0004 |
+| ROC-AUC | 0.9914 | 0.0001 |
+| PR-AUC | 0.9803 | 0.0002 |
+| False-Positive Rate | 0.00362 | 0.00004 |
+
+#### Comparison with Frozen V10
+
+- V13 increased mean recall by 0.07 percentage points (92.09% to 92.16%) and
+  reduced mean FPR by 0.05 percentage points (0.410% to 0.362%).
+- Across the outer-fold predictions, V13 detected 790 more attacks and produced
+  1,942 fewer false alerts than V10 at the same threshold.
+- Accuracy, precision, F1-score, ROC-AUC, and PR-AUC all improved. The
+  improvements were stable across folds, and V13 met both targets in all five
+  fixed-threshold outer-fold evaluations.
+- Freeze V13 as the preferred release candidate. Its next evaluation must use a
+  new independent holdout or external traffic dataset; V10's holdout is not
+  eligible for reuse.
+
+#### Evaluation Reports
+
+- `models/evaluation/xgb_v13_feature30_cv/fixed_threshold_summary.csv`
+- `models/evaluation/xgb_v13_feature30_cv/fixed_threshold_fold_metrics.csv`
+- `models/evaluation/xgb_v13_feature30_cv/feature_importance_summary.csv`
+- `models/evaluation/xgb_v13_feature30_cv/out_of_fold_error_summary.csv`
 
 ---
 
@@ -856,6 +892,7 @@ Planned — no training, cross-validation, or final-holdout metrics recorded yet
 | V10 | XGBoost | 0.9803 | 0.9835 | 0.9211 | 0.9513 | 0.9906 | 2026-08-13 | Frozen threshold 0.26; final holdout FPR passed but recall was 91.91% |
 | V11 | XGBoost | 0.9802 | 0.9826 | 0.9215 | 0.9511 | 0.9906 | 2026-08-13 | Policy-compliant: threshold 0.27, FPR 0.43% |
 | V12 | XGBoost (5-fold CV) | 0.9801 | 0.9823 | 0.9212 | 0.9508 | 0.9904 | 2026-08-20 | Rejected: marginal recall gain; FPR increased to 0.44% |
+| V13 | XGBoost (5-fold CV) | 0.9808 | 0.9853 | 0.9216 | 0.9524 | 0.9914 | 2026-08-20 | Frozen candidate; all fixed-threshold folds policy-compliant, FPR 0.36% |
 
 ---
 

@@ -94,9 +94,14 @@ def test_candidate_status_is_accepted_for_development_profiles(tmp_path) -> None
 def test_v13_feature_expansion_profile_is_valid() -> None:
     profile = load_release_profile("models/configs/xgb_v13_feature30_candidate.json")
 
-    assert profile["status"] == "candidate"
+    assert profile["status"] == "release_candidate"
     assert profile["preprocessing"]["feature_selection"]["n_features"] == 30
     assert profile["model"]["scale_pos_weight"] == 1.0
+
+
+def test_frozen_profile_threshold_overrides_validation_selection() -> None:
+    assert train_module.resolve_operating_threshold(0.30, 0.26) == 0.26
+    assert train_module.resolve_operating_threshold(0.30) == 0.30
 
 
 def test_artifact_paths_require_explicit_overwrite(tmp_path, monkeypatch) -> None:

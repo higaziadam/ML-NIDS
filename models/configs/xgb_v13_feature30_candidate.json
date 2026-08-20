@@ -1,7 +1,8 @@
 {
   "model_name": "xgb_v13_feature30",
-  "status": "candidate",
+  "status": "release_candidate",
   "created_date": "2026-08-20",
+  "frozen_date": "2026-08-20",
   "parent_candidate": "xgb_v10_regularized_fine_threshold",
   "dataset": {
     "name": "CICIDS2018",
@@ -58,6 +59,16 @@
     "selection_rule": "Choose the highest validation threshold that meets both targets. The pre-registered fixed threshold for cross-validation is 0.26."
   },
   "candidate_hypothesis": "Expanding f_classif feature selection from 20 to 30 features may improve discrimination of low-confidence attacks while retaining the frozen V10 low-alert operating point.",
+  "cross_validation_evidence": {
+    "workflow": "five-fold nested stratified cross-validation with a fixed threshold of 0.26",
+    "all_fixed_threshold_outer_folds_policy_compliant": true,
+    "mean_recall": 0.9216377593021375,
+    "mean_false_positive_rate": 0.0036174300868399628,
+    "mean_precision": 0.985319634458914,
+    "mean_f1": 0.9524152892279236,
+    "mean_roc_auc": 0.9913681623450902,
+    "mean_pr_auc": 0.9802510568024031
+  },
   "evaluation_protocol": [
     "Run nested cross-validation on development data only.",
     "Report both per-fold validation-selected thresholds and the fixed threshold of 0.26.",
@@ -67,6 +78,7 @@
   ],
   "notes": [
     "V13 changes only the selected feature count relative to the frozen V10 profile.",
-    "This is a candidate specification, not a trained artifact or a release."
+    "The configuration and threshold are frozen as a release candidate after development-only cross-validation.",
+    "No canonical artifact or independent final-holdout evaluation has been produced yet."
   ]
 }
