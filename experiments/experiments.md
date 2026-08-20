@@ -874,6 +874,37 @@ targets (recall >= 0.92 and FPR <= 0.005).
 - `models/evaluation/xgb_v13_feature30_cv/feature_importance_summary.csv`
 - `models/evaluation/xgb_v13_feature30_cv/out_of_fold_error_summary.csv`
 
+#### Canonical Artifact Verification (Development Data Only)
+
+The frozen V13 profile was trained into the canonical artifact using
+`train_data.csv`. Its configured threshold of `0.26` was preserved even though
+the internal validation split also found `0.27` eligible; this confirms the
+saved artifact uses the pre-registered operating point.
+
+- Accuracy: 0.9809
+- Precision: 0.9857
+- Recall (attack): 0.9218
+- F1-Score: 0.9527
+- ROC-AUC: 0.9914
+- PR-AUC: 0.9804
+- False-Positive Rate: 0.0035
+- Confusion matrix: TN 602,200; FP 2,124; FN 12,452; TP 146,751.
+- Artifact inference smoke test passed: the saved model, feature schema, and
+  MinMax scaler processed 100 raw rows into the expected 30-feature input.
+
+This split was drawn from development data and is not V13's final unbiased
+evaluation. A new independent labeled dataset or external traffic capture is
+required for the one-time final evaluation.
+
+#### Model Location
+
+`models/saved/xgb_v13_feature30.pkl`
+
+#### Artifact Metadata
+
+`models/saved/xgb_v13_feature30_metadata.json`
+SHA-256: `CDE4E1A9439D7B9F5B96150E5EF838FC4B9C3012C85DD7843B798EA437ED7054`
+
 ---
 
 ## Performance Comparison
@@ -912,7 +943,7 @@ targets (recall >= 0.92 and FPR <= 0.005).
 - [x] Implement cross-validation
 - [ ] Test hyperparameter tuning (GridSearchCV)
 - [ ] Apply SMOTE for class imbalance
-- [ ] Feature importance analysis
+- [x] Feature importance analysis
 - [ ] Neural network baseline
 - [ ] Compare with production NIDS systems
 

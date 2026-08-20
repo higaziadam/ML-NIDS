@@ -30,19 +30,28 @@ Compared with V10 at the same fixed threshold, V13 detected 790 more attacks
 and produced 1,942 fewer false alerts across the five outer folds. This is
 development evidence only, not a final deployment estimate.
 
+## Canonical artifact verification
+
+- Artifact: `models/saved/xgb_v13_feature30.pkl`
+- Artifact SHA-256:
+  `CDE4E1A9439D7B9F5B96150E5EF838FC4B9C3012C85DD7843B798EA437ED7054`
+- Metadata: `models/saved/xgb_v13_feature30_metadata.json`
+
+The artifact was trained on `train_data.csv` with the frozen threshold of
+`0.26`. Its internal development split achieved 92.18% attack recall and a
+0.351% FPR. A read-only inference smoke test successfully loaded the artifact,
+applied its saved MinMax scaler and 30-feature schema, and produced predictions
+for 100 input rows.
+
+This is an artifact-integrity check, not a final independent evaluation.
+
 ## Next validation boundary
 
-The V10 final holdout is consumed and must not be used for V13. Train a
-canonical V13 artifact with the frozen profile, then evaluate it once on a new
+The V10 final holdout is consumed and must not be used for V13. The canonical
+V13 artifact is already trained. Evaluate that exact artifact once on a new
 independent holdout or external traffic dataset. The training pipeline honors
 the frozen profile threshold rather than reselecting a different operating
 point.
-
-```powershell
-.\venv\Scripts\python.exe -m src.train `
-  --config models\configs\xgb_v13_feature30_candidate.json `
-  --data data\processed\train_data.csv
-```
 
 Before performing final evaluation, record the new holdout source, its checksum,
 and the fact that it was not used during V13 development.
