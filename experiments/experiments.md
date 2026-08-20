@@ -601,15 +601,47 @@ Actual Attack           12,563               146,640
 - Compared with V6, V10 generated 565 fewer false alerts (2,456 versus 3,021)
   while missing only 50 additional attacks (12,563 versus 12,513).
 - V10 improves accuracy, precision, F1-score, and false-positive rate over V6;
-  V6 retains a marginally higher attack recall. V10 is the preferred
-  policy-compliant low-alert candidate, subject to cross-validation and an
-  independent holdout evaluation.
+  V6 retains a marginally higher attack recall.
 
 #### Model Location
 `models/saved/xgb_v10_regularized_fine_threshold.pkl`
 
 #### Evaluation Report
 `models/saved/xgb_v10_regularized_fine_threshold_results/metrics.csv`
+
+#### Post-Freeze Validation
+
+The frozen V10 profile was evaluated with five-fold nested stratified
+cross-validation on development data. Every fold used the saved deployment
+threshold of `0.26`; the outer-fold data was not used to select a threshold.
+
+| Metric | Mean | Standard Deviation |
+|---|---:|---:|
+| Accuracy | 0.9803 | 0.0002 |
+| Precision | 0.9834 | 0.0001 |
+| Recall (attack) | 0.9209 | 0.0008 |
+| F1-Score | 0.9511 | 0.0004 |
+| ROC-AUC | 0.9905 | 0.0001 |
+| PR-AUC | 0.9784 | 0.0002 |
+| False-Positive Rate | 0.00410 | 0.00003 |
+
+- The fixed operating point is stable: FPR ranged from 0.405% to 0.415% across
+  folds, remaining under the 0.50% limit in all five folds.
+- Recall ranged from 91.95% to 92.14%. Four of five folds satisfied the strict
+  92.00% recall target; the remaining fold was 0.05 percentage points below it.
+- The independent final-holdout evaluation at the same threshold achieved
+  91.91% recall and 0.41% FPR (244,577 true positives, 21,528 false negatives,
+  and 4,379 false positives). It passed the FPR target but missed the recall
+  target by 0.09 percentage points.
+- Therefore, V10 remains a frozen low-alert comparison candidate, but it is not
+  promoted as a fully policy-compliant release under the current rule that both
+  recall >= 0.92 and FPR <= 0.005 must be met on final holdout.
+
+#### Post-Freeze Validation Reports
+
+- `models/evaluation/xgb_v10_fixed_threshold_cv/fixed_threshold_summary.csv`
+- `models/evaluation/xgb_v10_fixed_threshold_cv/fixed_threshold_fold_metrics.csv`
+- `models/evaluation/xgb_v10_outer_holdout/metrics.csv`
 
 ---
 
@@ -698,7 +730,7 @@ Actual Attack           12,504               146,699
 | V7 | XGBoost | 0.9744 | 0.9478 | 0.9284 | 0.9380 | 0.9905 | 2026-08-13 | Higher recall; FPR 1.35%, not compliant |
 | V8 | XGBoost | 0.9788 | 0.9744 | 0.9226 | 0.9478 | 0.9905 | 2026-08-13 | Fine search; FPR 0.64%, still not compliant |
 | V9 | XGBoost | 0.9807 | 0.9866 | 0.9201 | 0.9522 | 0.9906 | 2026-08-13 | Lowest FPR (0.33%); validation recall target narrowly missed |
-| V10 | XGBoost | 0.9803 | 0.9835 | 0.9211 | 0.9513 | 0.9906 | 2026-08-13 | Policy-compliant: threshold 0.26, FPR 0.41% |
+| V10 | XGBoost | 0.9803 | 0.9835 | 0.9211 | 0.9513 | 0.9906 | 2026-08-13 | Frozen threshold 0.26; final holdout FPR passed but recall was 91.91% |
 | V11 | XGBoost | 0.9802 | 0.9826 | 0.9215 | 0.9511 | 0.9906 | 2026-08-13 | Policy-compliant: threshold 0.27, FPR 0.43% |
 
 ---
@@ -716,7 +748,7 @@ Actual Attack           12,504               146,699
 ## Future Experiments
 
 - [ ] Try ensemble methods (stacking, voting)
-- [ ] Implement cross-validation
+- [x] Implement cross-validation
 - [ ] Test hyperparameter tuning (GridSearchCV)
 - [ ] Apply SMOTE for class imbalance
 - [ ] Feature importance analysis
