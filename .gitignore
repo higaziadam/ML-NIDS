@@ -160,6 +160,9 @@ experiments/results/*
 *.model
 *.csv
 
+# Downloaded external-evaluation archive; keep external data out of Git.
+/MachineLearningCSV.zip
+
 # Temporary files
 *.tmp
 *.temp

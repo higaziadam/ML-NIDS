@@ -55,3 +55,26 @@ point.
 
 Before performing final evaluation, record the new holdout source, its checksum,
 and the fact that it was not used during V13 development.
+
+## CIC-IDS2017 compatibility preflight
+
+The supplied CIC-IDS2017 `MachineLearningCSV` files were inspected without
+running model evaluation. All eight files have a label column and can safely
+map the older CICFlowMeter names for 29 of V13's 30 required features. However,
+every supplied CSV lacks `Protocol`.
+
+Do not impute a value for `Protocol` or run `final-evaluate` with these files:
+the frozen V13 artifact was trained using that feature, so doing so would make
+the reported result invalid.
+
+Valid paths forward are:
+
+1. Generate a new independent capture in a controlled environment with a
+   CICFlowMeter export that includes all V13 features, including `Protocol`.
+2. Obtain the CIC-IDS2017 PCAPs and regenerate compatible flows with a
+   documented CICFlowMeter process and reliable labels.
+3. Create a separately documented cross-dataset model that deliberately omits
+   `Protocol`; that would be a new candidate, not V13's final evaluation.
+
+The header-only report is at
+`models/evaluation/xgb_v13_cicids2017_preflight/schema_preflight.csv`.

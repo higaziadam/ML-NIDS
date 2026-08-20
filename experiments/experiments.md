@@ -896,6 +896,18 @@ This split was drawn from development data and is not V13's final unbiased
 evaluation. A new independent labeled dataset or external traffic capture is
 required for the one-time final evaluation.
 
+#### CIC-IDS2017 External Schema Preflight
+
+- All eight downloaded CIC-IDS2017 CSVs contain labels and safely map 29 of the
+  30 frozen V13 features after header normalization.
+- Every CSV is missing `Protocol`; therefore, CIC-IDS2017 must not be used for
+  direct V13 final evaluation or have that feature imputed.
+- The next valid V13 evaluation source is a compatible independent flow export
+  or fresh controlled capture containing all 30 features. A model retrained
+  without `Protocol` would be a separate candidate, not a V13 result.
+
+`models/evaluation/xgb_v13_cicids2017_preflight/schema_preflight.csv`
+
 #### Model Location
 
 `models/saved/xgb_v13_feature30.pkl`
