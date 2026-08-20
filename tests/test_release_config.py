@@ -91,6 +91,14 @@ def test_candidate_status_is_accepted_for_development_profiles(tmp_path) -> None
     assert load_release_profile(profile_path)["status"] == "candidate"
 
 
+def test_v13_feature_expansion_profile_is_valid() -> None:
+    profile = load_release_profile("models/configs/xgb_v13_feature30_candidate.json")
+
+    assert profile["status"] == "candidate"
+    assert profile["preprocessing"]["feature_selection"]["n_features"] == 30
+    assert profile["model"]["scale_pos_weight"] == 1.0
+
+
 def test_artifact_paths_require_explicit_overwrite(tmp_path, monkeypatch) -> None:
     saved_dir = tmp_path / "saved"
     splits_dir = tmp_path / "splits"

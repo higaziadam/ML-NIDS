@@ -807,6 +807,39 @@ All five outer folds used the pre-registered threshold of `0.26`.
 
 ---
 
+### Experiment V13: Pre-Registered Feature-Set Expansion Candidate
+
+**Date**: 2026-08-20
+**Model**: XGBoost
+**Dataset**: CICIDS2018, binary classification (0 = benign, 1 = attack)
+
+#### Controlled Change
+- Retains V10's preprocessing policy, XGBoost hyperparameters, random seed,
+  `scale_pos_weight=1.0`, and threshold policy.
+- Expands `f_classif` feature selection from **20 to 30 features**.
+- Pre-registers threshold `0.26` for fixed-threshold cross-validation while
+  separately recording each fold's validation-selected threshold.
+
+#### Hypothesis
+- V10's false negatives were generally far below the decision threshold, so
+  additional discriminative flow features may improve their attack probability
+  without relying on a lower threshold or a higher class weight.
+
+#### Evaluation Protocol
+- Run five-fold nested cross-validation on `data/processed/train_data.csv` only.
+- Compare fixed-threshold V13 results against fixed-threshold V10 results.
+- Do not use V10's consumed final holdout for V13 design, tuning, or comparison.
+- Freeze V13 only if it provides a meaningful recall improvement while retaining
+  FPR <= 0.005 and low fold-to-fold variation.
+
+#### Candidate Profile
+`models/configs/xgb_v13_feature30_candidate.json`
+
+#### Status
+Planned — no training, cross-validation, or final-holdout metrics recorded yet.
+
+---
+
 ## Performance Comparison
 
 | Version | Model Type | Accuracy | Precision | Recall | F1-Score | ROC-AUC | Date | Notes |
@@ -849,4 +882,4 @@ All five outer folds used the pre-registered threshold of `0.26`.
 ---
 
 **Last Updated**: 2026-08-20
-**Total Experiments**: 12
+**Total Experiments**: 13
