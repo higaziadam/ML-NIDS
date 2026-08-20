@@ -28,6 +28,8 @@ because of their size and provenance.
   decision threshold.
 - Final-holdout and nested cross-validation workflows.
 - Batch CSV prediction through Python or Docker.
+- CICFlowMeter-style CSV ingestion that normalizes supported headers and submits
+  flow records to the API in batches.
 - FastAPI inference service with interactive OpenAPI documentation.
 - API schema discovery, optional API-key protection, request-size limits,
   single-container rate limiting, and Docker health checks.
@@ -80,6 +82,7 @@ ML-NIDS/
 │   ├── config.py                   # Default runtime configuration
 │   ├── data_preprocessing.py       # Fitted preprocessing utilities
 │   ├── evaluate.py                 # Metrics and threshold evaluation
+│   ├── flow_ingestion.py           # CICFlowMeter CSV-to-API adapter
 │   ├── predict.py                  # Batch prediction pipeline
 │   ├── train.py                    # Training pipeline
 │   └── validation.py               # Holdout and cross-validation workflow
@@ -211,6 +214,34 @@ page contains a valid V10 example. Stop the service with:
 docker compose down
 ```
 
+### CICFlowMeter CSV-to-API adapter
+
+The adapter takes an already-generated CICFlowMeter-style CSV, normalizes known
+CIC-IDS2017 header variants, verifies the live API schema, and writes one output
+row per input flow. Invalid rows are retained with `score_status=invalid_input`;
+they are not sent to the model.
+
+```powershell
+.\venv\Scripts\python.exe -m src.flow_ingestion `
+  --input path\to\cicflowmeter_export.csv `
+  --output output\scored_flows.csv
+```
+
+The command writes `output\scored_flows.csv` and a corresponding manifest JSON.
+The score file includes `source_row`, `model_version`, `threshold`,
+`prediction`, `probability`, `is_alert`, and `score_status`. If the API
+requires a key, set it outside source control:
+
+```powershell
+$env:ML_NIDS_API_KEY = 'your-api-key'
+.\venv\Scripts\python.exe -m src.flow_ingestion `
+  --input path\to\cicflowmeter_export.csv `
+  --output output\scored_flows.csv
+```
+
+This adapter scores completed flows; it does not capture packets or generate
+flows from a network interface or PCAP file.
+
 ### Docker batch prediction
 
 Build the batch image:
@@ -287,9 +318,9 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m pytest -q --basetemp temp\pytest
 ```
 
-The current suite contains 24 tests covering preprocessing, evaluation,
+The current suite contains 26 tests covering preprocessing, evaluation,
 release-profile validation, holdout/cross-validation safeguards, external-data
-schema preparation, batch prediction, and API behavior/protections.
+schema preparation, batch prediction, flow ingestion, and API behavior/protections.
 
 GitHub Actions runs this test suite and builds both Docker images on pushes and
 pull requests to `main`.

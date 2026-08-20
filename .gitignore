@@ -147,6 +147,9 @@ models/evaluation/*
 logs/*
 !logs/.gitkeep
 
+# Local batch and flow-ingestion outputs
+output/
+
 # Experiments
 experiments/results/*
 !experiments/results/.gitkeep
