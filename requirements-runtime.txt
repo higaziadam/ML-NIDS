@@ -1,0 +1,8 @@
+# Pinned CPU runtime used by the Docker inference image.
+# Matches the environment recorded in the V10, V13, and V14 artifacts.
+numpy==2.5.2
+pandas==3.0.5
+scikit-learn==1.9.0
+scipy==1.18.0
+pyarrow==25.0.1
+xgboost==3.4.0

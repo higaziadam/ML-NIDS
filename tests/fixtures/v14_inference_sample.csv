@@ -1,0 +1,3 @@
+Total Fwd Packets,Fwd Packets Length Total,Fwd Packet Length Max,Fwd Packet Length Min,Fwd Packet Length Mean,Bwd Packet Length Min,Bwd Packet Length Mean,Flow Bytes/s,Flow Packets/s,Bwd IAT Total,Bwd IAT Mean,Bwd IAT Std,Bwd IAT Max,Bwd Packets/s,Packet Length Min,Packet Length Max,Packet Length Mean,Packet Length Variance,RST Flag Count,PSH Flag Count,ACK Flag Count,Down/Up Ratio,Init Fwd Win Bytes,Init Bwd Win Bytes,Fwd Seg Size Min,Active Mean,Active Std,Active Max,Active Min,label
+2,12,6,6,6.0,0,0.0,4000000.0,666666.6667,0,0.0,0.0,0,0.0,6,6,6.0,0.0,0,0,1,0,33,-1,20,0.0,0.0,0,0,0
+1,6,6,6,6.0,6,6.0,110091.7431,18348.62385,0,0.0,0.0,0,9174.311927,6,6,6.0,0.0,0,0,1,1,29,256,20,0.0,0.0,0,0,0

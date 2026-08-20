@@ -3,9 +3,12 @@
 A machine learning-powered Network Intrusion Detection System (NIDS) for detecting network anomalies and cyber attacks in real-time.
 
 > **Current status:** the implemented system is a batch-training and batch-
-> inference ML pipeline. A Docker image is available for reproducible batch
-> inference; a FastAPI service is not implemented. The frozen XGBoost V10 release candidate is documented in
-> [RELEASE_V10.md](RELEASE_V10.md).
+> inference ML pipeline. Its Docker image has been smoke-tested with a mounted
+> model and input CSV. A FastAPI service is intentionally not implemented yet.
+> V10 is the selected low-alert internal candidate; V14's CIC-IDS2017 result
+> exposed a major external-generalization gap, so no model is presented as
+> production-ready. See [RELEASE_V10.md](RELEASE_V10.md) and
+> [experiments/experiments.md](experiments/experiments.md).
 
 > **Evaluation workflow:** use `python -m src.validation create-holdout`,
 > `cross-validate`, and `final-evaluate` for single-split final evaluation.
@@ -51,7 +54,7 @@ ML_NIDS/
 ## Installation
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.14 (the recorded training and release environment)
 - pip or conda
 
 ### Setup
@@ -80,33 +83,25 @@ ML_NIDS/
 
 ## Quick Start
 
-### Training
+### Reproduce a frozen candidate
 
-```python
-from src.train import train_model
+The command below creates a new artifact and refuses to overwrite the tracked
+V10 output paths. Use it only with the CICIDS2018 development data.
 
-# Train a model
-model = train_model(
-    data_path='data/processed/train.csv',
-    model_type='random_forest',  # or 'neural_network', 'svm'
-)
-
-# Save the model
-model.save('models/saved/model_v1.pkl')
+```powershell
+.\venv\Scripts\python.exe -m src.train `
+  --config models\configs\xgb_v10_candidate.json `
+  --data data\processed\train_data.csv `
+  --name xgb_v10_reproduction
 ```
 
-### Prediction
+### Batch prediction
 
-```python
-from src.predict import predict_anomaly
-
-# Make predictions
-predictions = predict_anomaly(
-    model_path='models/saved/model_v1.pkl',
-    data_path='data/processed/test.csv'
-)
-
-print(predictions)
+```powershell
+.\venv\Scripts\python.exe -m src.predict `
+  --model models\saved\xgb_v10_regularized_fine_threshold.pkl `
+  --data data\processed\your_flows.csv `
+  --output output\predictions.csv
 ```
 
 ## Datasets
@@ -129,19 +124,19 @@ python scripts/generate_splits.py
 ### 2. Train Model
 
 ```bash
-python src/train.py --config models/configs/model_config.yaml
+python -m src.train --data data/processed/train_data.csv --model xgboost --name experiment_name
 ```
 
-### 3. Evaluate Model
+### 3. Evaluate a saved model
 
 ```bash
-python src/evaluate.py --model models/saved/model_v1.pkl
+python -m src.validation final-evaluate --data data/processed/evaluation.csv --model models/saved/model.pkl --name evaluation_name
 ```
 
 ### 4. Make Predictions
 
 ```bash
-python src/predict.py --model models/saved/model_v1.pkl --data data/processed/test.csv
+python -m src.predict --model models/saved/model.pkl --data data/processed/test.csv --output output/predictions.csv
 ```
 
 ## Configuration
@@ -166,13 +161,19 @@ CONFIG = {
 }
 ```
 
-## Model Performance
+## Evaluation status and limitations
 
-| Model | Accuracy | Precision | Recall | F1-Score | ROC-AUC |
-|-------|----------|-----------|--------|----------|---------|
-| Random Forest | 98.5% | 97.2% | 98.1% | 97.6% | 0.995 |
-| Neural Network | 97.8% | 96.5% | 97.2% | 96.8% | 0.992 |
-| SVM | 96.2% | 94.8% | 95.6% | 95.2% | 0.985 |
+| Evaluation | Accuracy | Precision | Attack recall | FPR | Interpretation |
+|---|---:|---:|---:|---:|---|
+| V10 final CICIDS2018 holdout | 98.05% | 98.24% | 91.91% | 0.41% | Selected low-alert internal candidate; narrowly missed the project recall policy. |
+| V14 CIC-IDS2017 external test | 76.04% | 15.34% | 4.81% | 6.51% | Major cross-dataset generalization gap; not suitable for production claims. |
+
+V10 was selected for its low false-positive operating point, which reduces alert
+backlog. The external result must not be used for further threshold/model tuning.
+It demonstrates that a model trained on CICIDS2018 does not automatically
+generalize to CIC-IDS2017. A production deployment requires fresh representative
+labeled traffic, monitoring, and retraining/validation under the target network's
+conditions.
 
 ## Testing
 
@@ -203,7 +204,7 @@ docker run --rm `
   -v "${PWD}/data/processed:/app/input:ro" `
   -v "${PWD}/output:/app/output" `
   ml-nids:local `
-  --model /app/models/saved/xgb_v13_feature30.pkl `
+  --model /app/models/saved/xgb_v10_regularized_fine_threshold.pkl `
   --data /app/input/your_flows.csv `
   --output /app/output/predictions.csv
 ```

@@ -1,7 +1,7 @@
 # Reproducible CPU-only batch-inference image for ML-NIDS.
 # Model artifacts and input data are mounted at runtime; they are not embedded
 # in the image.
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -9,10 +9,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt setup.py README.md ./
+COPY requirements-runtime.txt ./
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir .
+    && pip install --no-cache-dir -r requirements-runtime.txt
 
 COPY src ./src
 

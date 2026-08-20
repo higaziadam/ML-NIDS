@@ -160,6 +160,11 @@ experiments/results/*
 *.model
 *.csv
 
+# Tiny synthetic fixtures are safe to track for automated tests and Docker
+# smoke checks; real datasets and generated CSV outputs remain ignored.
+!tests/fixtures/
+!tests/fixtures/*.csv
+
 # Downloaded external-evaluation archive; keep external data out of Git.
 /MachineLearningCSV.zip
 
