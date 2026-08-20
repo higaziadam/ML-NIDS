@@ -111,6 +111,12 @@ Use the fixed-threshold report when deciding whether the frozen V10 operating
 threshold has enough recall and false-positive-rate margin. It does not tune
 the threshold and it does not access the final holdout.
 
+For development-only diagnostic reports, add `--save-diagnostics` to the
+cross-validation command. This writes outer-fold feature importance, an
+aggregated false-positive/false-negative report, and out-of-fold predictions.
+Those predictions can be large; they are not final-holdout predictions and must
+not be used to tune a candidate after its final-holdout evaluation.
+
 Only after deciding that cross-validation results are acceptable should you run
 the frozen V10 artifact against `final_holdout.csv` once:
 

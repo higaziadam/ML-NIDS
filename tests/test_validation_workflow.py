@@ -107,6 +107,7 @@ def test_nested_cross_validation_writes_summary_without_final_holdout(tmp_path) 
         "cv",
         folds=2,
         output_root=tmp_path / "evaluation",
+        save_diagnostics=True,
     )
 
     summary = pd.read_csv(output_dir / "summary.csv")
@@ -116,5 +117,15 @@ def test_nested_cross_validation_writes_summary_without_final_holdout(tmp_path) 
     assert {"recall", "fpr"}.issubset(summary["metric"])
     assert {"recall", "fpr"}.issubset(fixed_summary["metric"])
     assert set(fixed_folds["frozen_profile_threshold"]) == {0.5}
+    diagnostics = pd.read_csv(output_dir / "out_of_fold_predictions.csv")
+    feature_summary = pd.read_csv(output_dir / "feature_importance_summary.csv")
+    error_summary = pd.read_csv(output_dir / "out_of_fold_error_summary.csv")
+    assert len(diagnostics) == 40
+    assert set(diagnostics["outcome"]).issubset(
+        {"true_negative", "false_positive", "false_negative", "true_positive"}
+    )
+    assert {"feature", "mean_importance", "selection_frequency"}.issubset(feature_summary.columns)
+    assert {"outcome", "samples", "sample_fraction"}.issubset(error_summary.columns)
     assert metadata["workflow"] == "nested_stratified_cross_validation"
+    assert metadata["diagnostics_saved"] is True
     assert metadata["final_holdout_accessed"] is False

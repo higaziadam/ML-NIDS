@@ -127,8 +127,8 @@ def _fit_fold(
     X_outer_test_raw: pd.DataFrame,
     y_outer_test_raw: pd.Series,
     runtime_config: Mapping[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Fit one fold and score both selected and frozen operating thresholds."""
+) -> tuple[dict[str, Any], dict[str, Any], pd.DataFrame, pd.DataFrame]:
+    """Fit one fold, score thresholds, and return development-only diagnostics."""
     X_train, y_train = preprocess_data(X_train_raw, y_train_raw, runtime_config)
     X_val, y_val = preprocess_holdout_data(
         X_val_raw, y_val_raw, X_train.columns.tolist(), X_train_raw, runtime_config
@@ -197,7 +197,35 @@ def _fit_fold(
         }
     )
     fixed_metrics["frozen_profile_threshold"] = frozen_threshold
-    return selected_metrics, fixed_metrics
+    fixed_predictions = np.where(
+        outer_probabilities >= frozen_threshold, positive_class, negative_class
+    )
+    outcome = np.select(
+        [
+            (y_outer_test.to_numpy() == negative_class) & (fixed_predictions == negative_class),
+            (y_outer_test.to_numpy() == negative_class) & (fixed_predictions == positive_class),
+            (y_outer_test.to_numpy() == positive_class) & (fixed_predictions == negative_class),
+        ],
+        ["true_negative", "false_positive", "false_negative"],
+        default="true_positive",
+    )
+    out_of_fold_predictions = pd.DataFrame(
+        {
+            "source_row_id": y_outer_test.index.to_numpy(),
+            "actual_label": y_outer_test.to_numpy(),
+            "predicted_label": fixed_predictions,
+            "attack_probability": outer_probabilities,
+            "distance_from_threshold": np.abs(outer_probabilities - frozen_threshold),
+            "outcome": outcome,
+        }
+    )
+    importances = np.asarray(model.get_feature_importance(), dtype=float)
+    if len(importances) != len(X_train.columns):
+        raise ValueError("Model feature-importance output does not match the trained feature schema.")
+    feature_importance = pd.DataFrame(
+        {"feature": X_train.columns.to_numpy(), "importance": importances}
+    )
+    return selected_metrics, fixed_metrics, out_of_fold_predictions, feature_importance
 
 
 def _metric_summary(metrics: pd.DataFrame) -> pd.DataFrame:
@@ -218,6 +246,36 @@ def _metric_summary(metrics: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def _out_of_fold_error_summary(predictions: pd.DataFrame) -> pd.DataFrame:
+    """Summarize fixed-threshold outer-fold outcomes without exposing raw traffic fields."""
+    summary = (
+        predictions.groupby("outcome", sort=False)
+        .agg(
+            samples=("outcome", "size"),
+            mean_attack_probability=("attack_probability", "mean"),
+            median_attack_probability=("attack_probability", "median"),
+            mean_distance_from_threshold=("distance_from_threshold", "mean"),
+        )
+        .reset_index()
+    )
+    summary["sample_fraction"] = summary["samples"] / len(predictions)
+    return summary.sort_values("samples", ascending=False).reset_index(drop=True)
+
+
+def _feature_importance_summary(importances: pd.DataFrame, folds: int) -> pd.DataFrame:
+    """Aggregate feature importance and selection stability across outer folds."""
+    summary = (
+        importances.groupby("feature", as_index=False)
+        .agg(
+            mean_importance=("importance", "mean"),
+            std_importance=("importance", "std"),
+            folds_selected=("fold", "nunique"),
+        )
+    )
+    summary["selection_frequency"] = summary["folds_selected"] / folds
+    return summary.sort_values(["mean_importance", "feature"], ascending=[False, True]).reset_index(drop=True)
+
+
 def cross_validate_release_profile(
     data_path: str | Path,
     profile_path: str | Path,
@@ -226,13 +284,22 @@ def cross_validate_release_profile(
     label_column: str = "label",
     output_root: Path = EVALUATION_DIR,
     overwrite: bool = False,
+    save_diagnostics: bool = False,
 ) -> Path:
-    """Run nested stratified CV without accessing a final holdout partition."""
+    """Run nested stratified CV without accessing a final holdout partition.
+
+    When ``save_diagnostics`` is enabled, out-of-fold predictions and feature
+    importance are saved from outer development folds only.
+    """
     if folds < 2:
         raise ValueError("folds must be at least 2.")
     profile = load_release_profile(profile_path)
     runtime_config = runtime_config_from_profile(profile, CONFIG)
     X, y = _load_labeled_data(data_path, label_column)
+    # Use stable, unique source row identifiers in diagnostic files even after
+    # preprocessing drops rows with missing values.
+    X = X.reset_index(drop=True)
+    y = y.reset_index(drop=True)
     class_counts = y.value_counts()
     if class_counts.min() < folds:
         raise ValueError("Each class must contain at least as many samples as the number of folds.")
@@ -249,6 +316,8 @@ def cross_validate_release_profile(
     )
     selected_fold_rows = []
     fixed_fold_rows = []
+    out_of_fold_prediction_rows = []
+    feature_importance_rows = []
     for fold_number, (outer_train_idx, outer_test_idx) in enumerate(outer_cv.split(X, y), start=1):
         X_outer_train = X.iloc[outer_train_idx]
         y_outer_train = y.iloc[outer_train_idx]
@@ -259,7 +328,7 @@ def cross_validate_release_profile(
             random_state=runtime_config["data"]["random_state"] + fold_number,
             stratify=y_outer_train,
         )
-        selected_metrics, fixed_metrics = _fit_fold(
+        selected_metrics, fixed_metrics, out_of_fold_predictions, feature_importance = _fit_fold(
             X_inner_train,
             y_inner_train,
             X_inner_val,
@@ -272,6 +341,11 @@ def cross_validate_release_profile(
         fixed_metrics["fold"] = fold_number
         selected_fold_rows.append(selected_metrics)
         fixed_fold_rows.append(fixed_metrics)
+        if save_diagnostics:
+            out_of_fold_predictions["fold"] = fold_number
+            feature_importance["fold"] = fold_number
+            out_of_fold_prediction_rows.append(out_of_fold_predictions)
+            feature_importance_rows.append(feature_importance)
         logger.info(f"Completed nested CV fold {fold_number}/{folds}")
 
     selected_fold_metrics = pd.DataFrame(selected_fold_rows)
@@ -280,6 +354,16 @@ def cross_validate_release_profile(
     save_data(_metric_summary(selected_fold_metrics), output_dir / "summary.csv")
     save_data(fixed_fold_metrics, output_dir / "fixed_threshold_fold_metrics.csv")
     save_data(_metric_summary(fixed_fold_metrics), output_dir / "fixed_threshold_summary.csv")
+    if save_diagnostics:
+        out_of_fold_predictions = pd.concat(out_of_fold_prediction_rows, ignore_index=True)
+        feature_importance = pd.concat(feature_importance_rows, ignore_index=True)
+        save_data(out_of_fold_predictions, output_dir / "out_of_fold_predictions.csv")
+        save_data(_out_of_fold_error_summary(out_of_fold_predictions), output_dir / "out_of_fold_error_summary.csv")
+        save_data(feature_importance, output_dir / "feature_importance_by_fold.csv")
+        save_data(
+            _feature_importance_summary(feature_importance, folds),
+            output_dir / "feature_importance_summary.csv",
+        )
     _write_json(
         output_dir / "metadata.json",
         {
@@ -297,6 +381,7 @@ def cross_validate_release_profile(
             "all_fixed_threshold_outer_folds_policy_compliant": bool(
                 fixed_fold_metrics["outer_policy_compliant"].all()
             ),
+            "diagnostics_saved": save_diagnostics,
             "final_holdout_accessed": False,
         },
     )
@@ -373,6 +458,11 @@ def main() -> None:
     cv_parser.add_argument("--folds", type=int, default=5)
     cv_parser.add_argument("--label", default="label")
     cv_parser.add_argument("--overwrite", action="store_true")
+    cv_parser.add_argument(
+        "--save-diagnostics",
+        action="store_true",
+        help="Save outer-fold predictions, error summaries, and feature-importance reports.",
+    )
 
     final_parser = subparsers.add_parser("final-evaluate", help="Evaluate a frozen artifact once")
     final_parser.add_argument("--data", required=True)
@@ -386,7 +476,15 @@ def main() -> None:
     if args.command == "create-holdout":
         create_final_holdout(args.data, args.name, args.holdout_size, args.label, args.random_state, overwrite=args.overwrite)
     elif args.command == "cross-validate":
-        cross_validate_release_profile(args.data, args.config, args.name, args.folds, args.label, overwrite=args.overwrite)
+        cross_validate_release_profile(
+            args.data,
+            args.config,
+            args.name,
+            args.folds,
+            args.label,
+            overwrite=args.overwrite,
+            save_diagnostics=args.save_diagnostics,
+        )
     else:
         evaluate_final_holdout(args.data, args.model, args.config, args.name, args.label, overwrite=args.overwrite)
 
