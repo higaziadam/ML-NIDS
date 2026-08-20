@@ -643,6 +643,33 @@ threshold of `0.26`; the outer-fold data was not used to select a threshold.
 - `models/evaluation/xgb_v10_fixed_threshold_cv/fixed_threshold_fold_metrics.csv`
 - `models/evaluation/xgb_v10_outer_holdout/metrics.csv`
 
+#### Development-Only Diagnostic Analysis
+
+Five-fold V10 cross-validation was rerun with out-of-fold diagnostics enabled.
+This analysis used `train_data.csv` only; it did not access the final holdout.
+
+- All 20 selected features appeared in all five folds, showing strong feature
+  selection stability. The most influential features were `Fwd Seg Size Min`,
+  `Init Fwd Win Bytes`, `Fwd Packet Length Max`, `Init Bwd Win Bytes`, and
+  `RST Flag Count`.
+- The outer-fold predictions contained 83,960 false negatives (1.65% of all
+  development samples) and 16,516 false positives (0.32%).
+- False negatives had a median attack probability of 0.0647, far below the
+  0.26 operating threshold; only 2,819 (3.36%) were within 0.05 of it.
+  Lowering the threshold alone is therefore unlikely to recover enough missed
+  attacks to satisfy the recall target.
+- False positives had a median attack probability of 0.4104. Only 4,022
+  (24.35%) were within 0.05 of the threshold, indicating that many false alerts
+  are also high-confidence model decisions rather than borderline cases.
+- The evidence supports a targeted feature/model experiment for V13 instead of
+  further threshold-only or class-weight-only tuning.
+
+#### Diagnostic Reports
+
+- `models/evaluation/xgb_v10_diagnostics_cv/feature_importance_summary.csv`
+- `models/evaluation/xgb_v10_diagnostics_cv/out_of_fold_error_summary.csv`
+- `models/evaluation/xgb_v10_diagnostics_cv/out_of_fold_predictions.csv`
+
 ---
 
 ### Experiment V11: Regularized XGBoost with Moderate Class Weight
