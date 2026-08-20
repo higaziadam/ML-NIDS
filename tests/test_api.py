@@ -55,3 +55,34 @@ def test_predict_rejects_a_record_missing_a_required_feature(tmp_path) -> None:
 
     assert response.status_code == 422
     assert "missing required training columns" in response.json()["detail"]
+
+
+def test_predict_can_require_an_api_key(tmp_path) -> None:
+    with TestClient(create_app(_write_artifact(tmp_path), api_key="test-secret")) as client:
+        unauthorized = client.post("/predict", json={"records": [{"flow_bytes": 1.5, "packet_count": 1.5}]})
+        authorized = client.post(
+            "/predict",
+            headers={"X-API-Key": "test-secret"},
+            json={"records": [{"flow_bytes": 1.5, "packet_count": 1.5}]},
+        )
+
+    assert unauthorized.status_code == 401
+    assert authorized.status_code == 200
+
+
+def test_predict_enforces_request_size_and_rate_limits(tmp_path) -> None:
+    app = create_app(
+        _write_artifact(tmp_path),
+        max_request_bytes=1_000,
+        rate_limit_requests=1,
+        rate_limit_window_seconds=60,
+    )
+    with TestClient(app) as client:
+        first = client.post("/predict", json={"records": [{"flow_bytes": 1.5, "packet_count": 1.5}]})
+        limited = client.post("/predict", json={"records": [{"flow_bytes": 1.5, "packet_count": 1.5}]})
+
+    assert first.status_code == 200
+    assert first.headers["cache-control"] == "no-store"
+    assert first.headers["x-content-type-options"] == "nosniff"
+    assert limited.status_code == 429
+    assert limited.headers["retry-after"]

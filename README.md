@@ -231,8 +231,22 @@ docker compose down
 ```
 
 This local API has no authentication, TLS termination, persistent request log,
-or horizontal scaling. Put it behind an authenticated reverse proxy and add
-monitoring before exposing it beyond a trusted development network.
+or horizontal scaling by default. Set an API key before exposing predictions:
+
+```powershell
+$env:API_KEY = 'replace-with-a-long-random-secret'
+docker compose up --build -d
+```
+
+When `API_KEY` is set, callers must include the matching `X-API-Key` header on
+`POST /predict`. Health and schema endpoints remain unauthenticated for local
+orchestrator checks. Prediction requests are limited to 1 MiB and 60 requests
+per client IP per 60 seconds by default; override `MAX_REQUEST_BYTES`,
+`RATE_LIMIT_REQUESTS`, and `RATE_LIMIT_WINDOW_SECONDS` through environment
+variables. These limits are in-memory and apply to one container only. Put the
+service behind an authenticated HTTPS reverse proxy with centralized rate
+limiting, monitoring, and secret management before public or multi-instance
+deployment.
 
 ### Docker batch prediction
 

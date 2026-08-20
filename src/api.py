@@ -5,12 +5,16 @@ startup and never trains, tunes, or stores request payloads.
 """
 
 from contextlib import asynccontextmanager
+from collections import deque
+import hmac
 import os
 from pathlib import Path
+import time
 from typing import AsyncIterator
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.predict import load_trained_model, make_predictions, preprocess_inference_data
@@ -104,9 +108,23 @@ def _validate_artifact(artifact: object) -> dict:
     return artifact
 
 
-def create_app(model_path: str | Path | None = None) -> FastAPI:
+def create_app(
+    model_path: str | Path | None = None,
+    *,
+    api_key: str | None = None,
+    max_request_bytes: int | None = None,
+    rate_limit_requests: int | None = None,
+    rate_limit_window_seconds: int | None = None,
+) -> FastAPI:
     """Create an API application that loads the selected model during startup."""
     configured_path = Path(model_path or os.getenv("MODEL_PATH", DEFAULT_MODEL_PATH))
+    configured_api_key = api_key if api_key is not None else os.getenv("API_KEY")
+    request_limit = max_request_bytes if max_request_bytes is not None else int(os.getenv("MAX_REQUEST_BYTES", "1048576"))
+    rate_limit = rate_limit_requests if rate_limit_requests is not None else int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
+    rate_window = rate_limit_window_seconds if rate_limit_window_seconds is not None else int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+    if request_limit <= 0 or rate_limit <= 0 or rate_window <= 0:
+        raise ValueError("API request-size and rate-limit settings must be positive integers.")
+    request_timestamps: dict[str, deque[float]] = {}
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -124,6 +142,53 @@ def create_app(model_path: str | Path | None = None) -> FastAPI:
         description="Inference-only API for a frozen ML-NIDS artifact.",
         lifespan=lifespan,
     )
+
+    @app.middleware("http")
+    async def apply_request_protections(request: Request, call_next):
+        """Apply lightweight single-container safeguards to prediction traffic."""
+        if request.url.path == "/predict":
+            content_length = request.headers.get("content-length")
+            try:
+                declared_size = int(content_length) if content_length is not None else None
+            except ValueError:
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={"detail": "Invalid Content-Length header."},
+                )
+            if declared_size is not None and declared_size > request_limit:
+                return JSONResponse(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    content={"detail": f"Request body exceeds the {request_limit}-byte limit."},
+                )
+
+            client_host = request.client.host if request.client else "unknown"
+            now = time.monotonic()
+            timestamps = request_timestamps.setdefault(client_host, deque())
+            while timestamps and now - timestamps[0] >= rate_window:
+                timestamps.popleft()
+            if len(timestamps) >= rate_limit:
+                retry_after = max(1, int(rate_window - (now - timestamps[0])))
+                return JSONResponse(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    content={"detail": "Prediction rate limit exceeded. Try again later."},
+                    headers={"Retry-After": str(retry_after)},
+                )
+            timestamps.append(now)
+
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        if request.url.path == "/predict":
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    def require_api_key(request: Request) -> None:
+        """Require a configured API key for prediction without logging secrets."""
+        if not configured_api_key:
+            return
+        submitted_key = request.headers.get("X-API-Key", "")
+        if not hmac.compare_digest(submitted_key, configured_api_key):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing API key.")
 
     @app.get("/health", response_model=HealthResponse, summary="Service readiness")
     def health(request: Request) -> HealthResponse:
@@ -154,7 +219,11 @@ def create_app(model_path: str | Path | None = None) -> FastAPI:
             "when a different artifact is mounted."
         ),
     )
-    def predict(payload: PredictionRequest, request: Request) -> PredictionResponse:
+    def predict(
+        payload: PredictionRequest,
+        request: Request,
+        _: None = Depends(require_api_key),
+    ) -> PredictionResponse:
         artifact = request.app.state.artifact
         features = pd.DataFrame(payload.records)
         try:
