@@ -1,0 +1,51 @@
+{
+  "model_name": "xgb_v14_cicids2017_compatible",
+  "status": "candidate",
+  "created_date": "2026-08-20",
+  "parent_candidate": "xgb_v13_feature30",
+  "dataset": {
+    "name": "CICIDS2018 development with CIC-IDS2017 external evaluation",
+    "task": "binary classification",
+    "label_mapping": {"0": "benign", "1": "attack"}
+  },
+  "split": {"train_size": 0.7, "validation_size": 0.15, "test_size": 0.15, "random_state": 42, "stratified": true},
+  "preprocessing": {
+    "remove_duplicates": true,
+    "missing_value_strategy": "drop",
+    "outlier_removal": false,
+    "remove_constant_features": true,
+    "feature_selection": {
+      "method": "fixed_cross_dataset_schema",
+      "n_features": 29,
+      "fixed_features": [
+        "Total Fwd Packets", "Fwd Packets Length Total", "Fwd Packet Length Max", "Fwd Packet Length Min", "Fwd Packet Length Mean", "Bwd Packet Length Min", "Bwd Packet Length Mean", "Flow Bytes/s", "Flow Packets/s", "Bwd IAT Total", "Bwd IAT Mean", "Bwd IAT Std", "Bwd IAT Max", "Bwd Packets/s", "Packet Length Min", "Packet Length Max", "Packet Length Mean", "Packet Length Variance", "RST Flag Count", "PSH Flag Count", "ACK Flag Count", "Down/Up Ratio", "Init Fwd Win Bytes", "Init Bwd Win Bytes", "Fwd Seg Size Min", "Active Mean", "Active Std", "Active Max", "Active Min"
+      ],
+      "remove_correlated_features": false,
+      "correlation_threshold": 0.95
+    },
+    "normalization": {"method": "minmax", "fit_on_training_data_only": true}
+  },
+  "model": {
+    "type": "xgboost", "n_estimators": 300, "max_depth": 10, "learning_rate": 0.05,
+    "subsample": 0.8, "colsample_bytree": 0.8, "min_child_weight": 3.0,
+    "reg_lambda": 1.0, "scale_pos_weight": 1.0, "random_state": 42, "n_jobs": -1,
+    "tree_method": "hist", "objective": "binary:logistic", "eval_metric": "logloss"
+  },
+  "threshold_policy": {
+    "selected_threshold": 0.26,
+    "candidates": [0.24, 0.25, 0.26, 0.27, 0.28, 0.29, 0.3, 0.31, 0.32],
+    "minimum_recall": 0.92,
+    "maximum_false_positive_rate": 0.005,
+    "selection_rule": "Choose the highest validation threshold that meets both targets. The fixed cross-dataset comparison threshold is 0.26."
+  },
+  "candidate_hypothesis": "A fixed 29-feature schema shared by CICIDS2018 and CIC-IDS2017 can preserve low-alert attack detection while enabling documented cross-dataset evaluation.",
+  "evaluation_protocol": [
+    "Use CICIDS2018 train_data.csv only for candidate cross-validation and configuration decisions.",
+    "Use CIC-IDS2017 labels only after the V14 configuration and threshold are frozen.",
+    "Report CIC-IDS2017 performance as cross-dataset evaluation, not as a pristine blind holdout, because its feature schema was inspected to establish compatibility."
+  ],
+  "notes": [
+    "V14 removes only Protocol from V13's 30-feature schema because CIC-IDS2017 CSV exports do not provide it.",
+    "This is a candidate specification, not a trained artifact or a release."
+  ]
+}

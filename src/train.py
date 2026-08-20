@@ -176,6 +176,22 @@ def engineer_features_for_holdouts(
     runtime_config: Mapping[str, Any] = CONFIG,
 ) -> Tuple[pd.DataFrame, list[pd.DataFrame]]:
     """Fit feature engineering on training data and apply that schema to holdouts."""
+    fixed_features = runtime_config["features"].get("selected_features")
+    if fixed_features:
+        missing_training = [column for column in fixed_features if column not in X_train.columns]
+        if missing_training:
+            raise ValueError(f"Training data is missing fixed release features: {missing_training}")
+        missing_holdouts = [
+            column for data in holdouts for column in fixed_features if column not in data.columns
+        ]
+        if missing_holdouts:
+            raise ValueError(
+                f"Holdout data is missing fixed release features: {sorted(set(missing_holdouts))}"
+            )
+        logger.info(f"Using {len(fixed_features)} fixed release features")
+        return X_train.loc[:, fixed_features].copy(), [
+            data.loc[:, fixed_features].copy() for data in holdouts
+        ]
     X_train_eng, selected_features = feature_engineering_pipeline(
         X_train, y_train,
         create_interactions=False,

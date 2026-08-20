@@ -104,6 +104,14 @@ def test_frozen_profile_threshold_overrides_validation_selection() -> None:
     assert train_module.resolve_operating_threshold(0.30) == 0.30
 
 
+def test_v14_fixed_feature_schema_overrides_dynamic_selection() -> None:
+    profile = load_release_profile("models/configs/xgb_v14_cicids2017_compatible_candidate.json")
+    runtime = runtime_config_from_profile(profile, CONFIG)
+
+    assert runtime["features"]["selected_features"] == profile["preprocessing"]["feature_selection"]["fixed_features"]
+    assert len(runtime["features"]["selected_features"]) == 29
+
+
 def test_artifact_paths_require_explicit_overwrite(tmp_path, monkeypatch) -> None:
     saved_dir = tmp_path / "saved"
     splits_dir = tmp_path / "splits"

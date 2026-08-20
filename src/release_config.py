@@ -123,10 +123,20 @@ def runtime_config_from_profile(
             "normalization_method": normalization["method"],
         }
     )
+    fixed_features = feature_selection.get("fixed_features")
+    if fixed_features is not None:
+        if (
+            not isinstance(fixed_features, list)
+            or not fixed_features
+            or any(not isinstance(feature, str) or not feature for feature in fixed_features)
+            or len(set(fixed_features)) != len(fixed_features)
+        ):
+            raise ValueError("preprocessing.feature_selection.fixed_features must be a unique non-empty list of names.")
     runtime_config["features"].update(
         {
             "n_features": feature_selection["n_features"],
             "correlation_threshold": feature_selection["correlation_threshold"],
+            "selected_features": list(fixed_features) if fixed_features is not None else None,
         }
     )
     runtime_config["model"] = {

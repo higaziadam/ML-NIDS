@@ -919,6 +919,37 @@ SHA-256: `CDE4E1A9439D7B9F5B96150E5EF838FC4B9C3012C85DD7843B798EA437ED7054`
 
 ---
 
+### Experiment V14: CIC-IDS2017-Compatible Fixed Feature Schema
+
+**Date**: 2026-08-20
+**Model**: XGBoost
+**Development Dataset**: CICIDS2018, binary classification
+**External Dataset**: CIC-IDS2017, held for cross-dataset evaluation
+
+#### Controlled Change
+- Retains V13's XGBoost hyperparameters, threshold `.26`, class weight, and
+  preprocessing policy.
+- Uses a fixed set of 29 CICFlowMeter features shared by CICIDS2018 and the
+  supplied CIC-IDS2017 CSVs.
+- Removes only `Protocol`, which CIC-IDS2017's machine-learning CSV export does
+  not provide.
+
+#### Evaluation Protocol
+- Cross-validate V14 on CICIDS2018 `train_data.csv` only.
+- Prepare CIC-IDS2017 with deterministic header aliases, numeric coercion, and
+  non-finite-row removal; do not inspect model performance during preparation.
+- If V14 is frozen after CICIDS2018 cross-validation, evaluate it once on the
+  prepared CIC-IDS2017 dataset and report it as cross-dataset evaluation.
+
+#### Candidate Profile
+`models/configs/xgb_v14_cicids2017_compatible_candidate.json`
+
+#### Status
+Planned — no V14 training, cross-validation, or CIC-IDS2017 evaluation metrics
+recorded yet.
+
+---
+
 ## Performance Comparison
 
 | Version | Model Type | Accuracy | Precision | Recall | F1-Score | ROC-AUC | Date | Notes |
@@ -962,4 +993,4 @@ SHA-256: `CDE4E1A9439D7B9F5B96150E5EF838FC4B9C3012C85DD7843B798EA437ED7054`
 ---
 
 **Last Updated**: 2026-08-20
-**Total Experiments**: 13
+**Total Experiments**: 14
