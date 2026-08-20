@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
-REQUIRED_STATUS = {"release_candidate", "released"}
+REQUIRED_STATUS = {"candidate", "release_candidate", "released"}
 REQUIRED_MODEL_FIELDS = {
     "type",
     "n_estimators",
@@ -44,7 +44,7 @@ def _require_mapping(value: Any, field_name: str) -> Mapping[str, Any]:
 
 
 def validate_release_profile(profile: Mapping[str, Any]) -> None:
-    """Validate the minimum contract required for a reproducible binary release."""
+    """Validate the minimum contract for a reproducible binary candidate or release."""
     for field in ("model_name", "status", "dataset", "split", "preprocessing", "model", "threshold_policy"):
         if field not in profile:
             raise ValueError(f"Release profile is missing required field '{field}'.")

@@ -1,0 +1,71 @@
+{
+  "model_name": "xgb_v12_scale_weight_105",
+  "status": "candidate",
+  "created_date": "2026-08-20",
+  "parent_candidate": "xgb_v10_regularized_fine_threshold",
+  "dataset": {
+    "name": "CICIDS2018",
+    "task": "binary classification",
+    "label_mapping": {
+      "0": "benign",
+      "1": "attack"
+    }
+  },
+  "split": {
+    "train_size": 0.7,
+    "validation_size": 0.15,
+    "test_size": 0.15,
+    "random_state": 42,
+    "stratified": true
+  },
+  "preprocessing": {
+    "remove_duplicates": true,
+    "missing_value_strategy": "drop",
+    "outlier_removal": false,
+    "remove_constant_features": true,
+    "feature_selection": {
+      "method": "f_classif",
+      "n_features": 20,
+      "remove_correlated_features": true,
+      "correlation_threshold": 0.95
+    },
+    "normalization": {
+      "method": "minmax",
+      "fit_on_training_data_only": true
+    }
+  },
+  "model": {
+    "type": "xgboost",
+    "n_estimators": 300,
+    "max_depth": 10,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 3.0,
+    "reg_lambda": 1.0,
+    "scale_pos_weight": 1.05,
+    "random_state": 42,
+    "n_jobs": -1,
+    "tree_method": "hist",
+    "objective": "binary:logistic",
+    "eval_metric": "logloss"
+  },
+  "threshold_policy": {
+    "selected_threshold": 0.26,
+    "candidates": [0.24, 0.25, 0.26, 0.27, 0.28, 0.29, 0.3, 0.31, 0.32],
+    "minimum_recall": 0.92,
+    "maximum_false_positive_rate": 0.005,
+    "selection_rule": "Choose the highest validation threshold that meets both targets. The pre-registered fixed threshold for cross-validation is 0.26."
+  },
+  "candidate_hypothesis": "A modest increase in scale_pos_weight from 1.00 to 1.05 may improve attack recall while retaining a false-positive rate below 0.005.",
+  "evaluation_protocol": [
+    "Run nested cross-validation on development data only.",
+    "Report both per-fold validation-selected thresholds and the fixed threshold of 0.26.",
+    "Do not use the V10 final-holdout results to adjust this candidate.",
+    "Do not evaluate this candidate on a final holdout until its configuration and operating threshold are frozen."
+  ],
+  "notes": [
+    "V12 changes only scale_pos_weight relative to the frozen V10 profile.",
+    "This is a candidate specification, not a trained artifact or a release."
+  ]
+}

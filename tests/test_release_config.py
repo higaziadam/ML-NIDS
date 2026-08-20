@@ -82,6 +82,15 @@ def test_release_profile_rejects_invalid_label_contract(tmp_path) -> None:
         load_release_profile(profile_path)
 
 
+def test_candidate_status_is_accepted_for_development_profiles(tmp_path) -> None:
+    candidate_profile = _v10_profile()
+    candidate_profile["status"] = "candidate"
+    profile_path = tmp_path / "candidate.json"
+    profile_path.write_text(json.dumps(candidate_profile), encoding="utf-8")
+
+    assert load_release_profile(profile_path)["status"] == "candidate"
+
+
 def test_artifact_paths_require_explicit_overwrite(tmp_path, monkeypatch) -> None:
     saved_dir = tmp_path / "saved"
     splits_dir = tmp_path / "splits"

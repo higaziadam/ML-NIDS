@@ -717,6 +717,38 @@ Actual Attack           12,504               146,699
 
 ---
 
+### Experiment V12: Pre-Registered Moderate Recall Candidate
+
+**Date**: 2026-08-20
+**Model**: XGBoost
+**Dataset**: CICIDS2018, binary classification (0 = benign, 1 = attack)
+
+#### Controlled Change
+- Retains V10's preprocessing, feature selection, XGBoost architecture, random
+  seed, and policy targets.
+- Changes only `scale_pos_weight` from `1.00` to **`1.05`**.
+- Pre-registers threshold `0.26` for fixed-threshold cross-validation, while
+  separately recording the threshold selected from each fold's inner validation
+  data.
+
+#### Hypothesis
+- The modest additional positive-class weight may increase attack recall without
+  exceeding the 0.50% false-positive-rate limit.
+
+#### Evaluation Protocol
+- Run five-fold nested cross-validation on `data/processed/train_data.csv` only.
+- Do not use the consumed V10 final holdout for any V12 tuning or comparison.
+- Freeze V12 only after reviewing its development-data cross-validation report;
+  then use a new independent holdout or external traffic dataset once.
+
+#### Candidate Profile
+`models/configs/xgb_v12_scale_weight_105_candidate.json`
+
+#### Status
+Planned — no training, cross-validation, or final-holdout metrics recorded yet.
+
+---
+
 ## Performance Comparison
 
 | Version | Model Type | Accuracy | Precision | Recall | F1-Score | ROC-AUC | Date | Notes |
@@ -757,5 +789,5 @@ Actual Attack           12,504               146,699
 
 ---
 
-**Last Updated**: 2026-08-13
-**Total Experiments**: 11
+**Last Updated**: 2026-08-20
+**Total Experiments**: 12
