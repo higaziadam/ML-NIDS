@@ -4,7 +4,8 @@ A machine learning-powered Network Intrusion Detection System (NIDS) for detecti
 
 > **Current status:** the implemented system is a batch-training and batch-
 > inference ML pipeline. Its Docker image has been smoke-tested with a mounted
-> model and input CSV. A FastAPI service is intentionally not implemented yet.
+> model and input CSV, and a FastAPI inference service is available through
+> Docker Compose.
 > V10 is the selected low-alert internal candidate; V14's CIC-IDS2017 result
 > exposed a major external-generalization gap, so no model is presented as
 > production-ready. See [RELEASE_V10.md](RELEASE_V10.md) and
@@ -184,6 +185,54 @@ pytest tests/ --cov=src  # With coverage
 ```
 
 ## Deployment
+
+### FastAPI inference service
+
+The API is inference-only: it loads one frozen artifact at startup and never
+trains, tunes, or persists submitted flows. Start it with the mounted V10
+artifact:
+
+```powershell
+docker compose up --build -d
+Invoke-RestMethod http://localhost:8000/health
+```
+
+Open `http://localhost:8000/docs` for interactive OpenAPI documentation. The
+service provides:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Confirms the service and reports model version, feature count, and threshold. |
+| `GET /schema` | Returns the exact feature names required by the mounted model. |
+| `POST /predict` | Scores one or more numeric flow records using the saved preprocessor and threshold. |
+
+Before calling `POST /predict`, retrieve the model schema:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/schema
+```
+
+Then send all of those numeric fields in each record. For example, create a
+JSON request with the returned field names and submit it:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/predict `
+  -Method Post `
+  -ContentType 'application/json' `
+  -Body '{"records":[{"feature_name":123.4}]}'
+```
+
+The example payload is illustrative: `feature_name` must be replaced by every
+feature returned by `GET /schema`. Missing, non-numeric, or non-finite fields
+are rejected with HTTP 422. Stop the local service with:
+
+```powershell
+docker compose down
+```
+
+This local API has no authentication, TLS termination, persistent request log,
+or horizontal scaling. Put it behind an authenticated reverse proxy and add
+monitoring before exposing it beyond a trusted development network.
 
 ### Docker batch prediction
 

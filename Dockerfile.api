@@ -1,0 +1,25 @@
+# Reproducible CPU-only HTTP inference image for ML-NIDS.
+# Mount the frozen model artifact at runtime; do not bake it into the image.
+FROM python:3.14-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    MPLBACKEND=Agg \
+    MODEL_PATH=/app/models/saved/xgb_v10_regularized_fine_threshold.pkl
+
+WORKDIR /app
+
+COPY requirements-runtime.txt ./
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements-runtime.txt
+
+COPY src ./src
+
+RUN useradd --create-home --uid 10001 nids \
+    && mkdir -p /app/models /app/logs \
+    && chown -R nids:nids /app
+
+USER nids
+EXPOSE 8000
+
+CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]

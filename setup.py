@@ -38,6 +38,8 @@ setup(
         "pyyaml>=6.0",
         "tqdm>=4.66.0",
         "xgboost>=2.1",
+        "fastapi>=0.115,<1.0",
+        "uvicorn[standard]>=0.30,<1.0",
     ],
     extras_require={
         "dev": [

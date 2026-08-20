@@ -1,0 +1,12 @@
+services:
+  nids-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      MODEL_PATH: /app/models/saved/xgb_v10_regularized_fine_threshold.pkl
+    volumes:
+      - ./models:/app/models:ro
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
