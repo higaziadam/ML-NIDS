@@ -1,0 +1,26 @@
+# Reproducible CPU-only batch-inference image for ML-NIDS.
+# Model artifacts and input data are mounted at runtime; they are not embedded
+# in the image.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    MPLBACKEND=Agg
+
+WORKDIR /app
+
+COPY requirements.txt setup.py README.md ./
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir .
+
+COPY src ./src
+
+RUN useradd --create-home --uid 10001 nids \
+    && mkdir -p /app/input /app/models /app/output /app/logs \
+    && chown -R nids:nids /app
+
+USER nids
+
+# Supply --model, --data, and --output after the image name.
+ENTRYPOINT ["python", "-m", "src.predict"]

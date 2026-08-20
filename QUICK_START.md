@@ -242,14 +242,22 @@ python -m cProfile -s cumtime src/train.py --data ...
 ### For DevOps/Deployment
 ```bash
 # 1. Build Docker image
-docker build -t ml-nids .
+docker build -t ml-nids:local .
 
-# 2. Run container
-docker run -p 8000:8000 ml-nids
-
-# 3. Access API
-curl http://localhost:8000/predict
+# 2. Run batch prediction (PowerShell)
+New-Item -ItemType Directory -Force output
+docker run --rm `
+  -v "${PWD}/models:/app/models:ro" `
+  -v "${PWD}/data/processed:/app/input:ro" `
+  -v "${PWD}/output:/app/output" `
+  ml-nids:local `
+  --model /app/models/saved/xgb_v13_feature30.pkl `
+  --data /app/input/your_flows.csv `
+  --output /app/output/predictions.csv
 ```
+
+The container provides batch prediction only. It does not expose an HTTP API;
+model and data files are mounted at runtime rather than copied into the image.
 
 ---
 

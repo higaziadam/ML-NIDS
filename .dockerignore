@@ -1,0 +1,26 @@
+.git
+.pytest_cache
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+
+# Datasets, trained artifacts, evaluation outputs, and logs are mounted when
+# the container runs and must not be copied into the image.
+data/
+models/saved/
+models/evaluation/
+logs/
+experiments/results/
+*.csv
+*.pkl
+*.joblib
+*.zip
+
+notebooks/
+MachineLearningCSV/
+tests/
+QUICK_START.md
+KAGGLE_QUICKSTART.md
+RELEASE_*.md

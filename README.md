@@ -3,8 +3,8 @@
 A machine learning-powered Network Intrusion Detection System (NIDS) for detecting network anomalies and cyber attacks in real-time.
 
 > **Current status:** the implemented system is a batch-training and batch-
-> inference ML pipeline. A FastAPI service and Docker image have not been
-> implemented yet. The frozen XGBoost V10 release candidate is documented in
+> inference ML pipeline. A Docker image is available for reproducible batch
+> inference; a FastAPI service is not implemented. The frozen XGBoost V10 release candidate is documented in
 > [RELEASE_V10.md](RELEASE_V10.md).
 
 > **Evaluation workflow:** use `python -m src.validation create-holdout`,
@@ -17,7 +17,7 @@ A machine learning-powered Network Intrusion Detection System (NIDS) for detecti
 - **ML-Powered**: Built with scikit-learn, TensorFlow/PyTorch
 - **Feature Extraction**: Advanced network flow feature engineering
 - **Model Evaluation**: Comprehensive metrics (precision, recall, F1, ROC-AUC)
-- **Production Ready**: API deployment with FastAPI (Coming soon!)
+- **Reproducible Inference**: Dockerized CPU batch prediction
 - **Logging & Monitoring**: Full audit trail of predictions
 
 ## Project Structure
@@ -184,21 +184,34 @@ pytest tests/ --cov=src  # With coverage
 
 ## Deployment
 
-### FastAPI Server
+### Docker batch prediction
 
-```bash
-cd deployment
-uvicorn app:app --reload
+Build the image from the repository root:
+
+```powershell
+docker build -t ml-nids:local .
 ```
 
-Access API at: `http://localhost:8000`
+Create an output directory, then mount your model directory, input directory,
+and output directory. The image contains code and dependencies only; it never
+contains your datasets or trained model.
 
-### Docker
-
-```bash
-docker build -t ml-nids .
-docker run -p 8000:8000 ml-nids
+```powershell
+New-Item -ItemType Directory -Force output
+docker run --rm `
+  -v "${PWD}/models:/app/models:ro" `
+  -v "${PWD}/data/processed:/app/input:ro" `
+  -v "${PWD}/output:/app/output" `
+  ml-nids:local `
+  --model /app/models/saved/xgb_v13_feature30.pkl `
+  --data /app/input/your_flows.csv `
+  --output /app/output/predictions.csv
 ```
+
+The selected model must be present locally under `models/saved/`, and the input
+CSV must contain the feature columns expected by that model. Results are
+written to `output/predictions.csv`. This is a batch CLI container, not an HTTP
+service; no port mapping is required.
 
 ## Contributing
 
