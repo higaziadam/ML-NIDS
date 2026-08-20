@@ -167,7 +167,7 @@ LOGGING_CONFIG = {
 # DATASET CONFIGURATION
 # ============================================================================
 DATASET_CONFIG = {
-    "dataset_name": "NSL-KDD",  # Options: NSL-KDD, CICIDS2018, KDD99, UNSW-NB15
+    "dataset_name": "CICIDS2018",  # Options: NSL-KDD, CICIDS2018, KDD99, UNSW-NB15
     "binary_classification": True,  # True: Normal vs Attack, False: Multi-class
     "normal_label": "normal",
     "attack_labels": ["attack"],
