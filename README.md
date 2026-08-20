@@ -1,93 +1,104 @@
-# ML-NIDS: Machine Learning-based Network Intrusion Detection System
+# ML-NIDS
 
-A machine learning-powered Network Intrusion Detection System (NIDS) for detecting network anomalies and cyber attacks in real-time.
+## 1. Project Name & Description
 
-> **Current status:** the implemented system is a batch-training and batch-
-> inference ML pipeline. Its Docker image has been smoke-tested with a mounted
-> model and input CSV, and a FastAPI inference service is available through
-> Docker Compose.
-> V10 is the selected low-alert internal candidate; V14's CIC-IDS2017 result
-> exposed a major external-generalization gap, so no model is presented as
-> production-ready. See [RELEASE_V10.md](RELEASE_V10.md) and
+**ML-NIDS** is a machine-learning Network Intrusion Detection System project
+for binary network-flow classification: `0 = benign` and `1 = attack`.
+
+The project provides a reproducible workflow for data preparation, model
+training, evaluation, batch prediction, and local HTTP inference. XGBoost
+release profiles preserve selected features, a fitted preprocessor, and the
+decision threshold with each saved model artifact.
+
+Raw datasets and trained artifacts are intentionally not included in Git
+because of their size and provenance.
+
+> **Status:** V10 is the selected low-alert internal XGBoost candidate. V14
+> demonstrated a substantial CICIDS2018-to-CIC-IDS2017 generalization gap, so
+> this project does not claim a production-ready intrusion detector. See
+> [RELEASE_V10.md](RELEASE_V10.md) and
 > [experiments/experiments.md](experiments/experiments.md).
 
-> **Evaluation workflow:** use `python -m src.validation create-holdout`,
-> `cross-validate`, and `final-evaluate` for single-split final evaluation.
-> See [RELEASE_V10.md](RELEASE_V10.md) for the exact commands and safeguards.
+## 2. Project Features
 
-## Features
+- Binary benign-versus-attack classification for network-flow data.
+- XGBoost and Random Forest experiment support.
+- Frozen release-profile configuration for reproducible candidate runs.
+- Training artifacts that retain the fitted preprocessor, ordered features, and
+  decision threshold.
+- Final-holdout and nested cross-validation workflows.
+- Batch CSV prediction through Python or Docker.
+- FastAPI inference service with interactive OpenAPI documentation.
+- API schema discovery, optional API-key protection, request-size limits,
+  single-container rate limiting, and Docker health checks.
+- Automated tests and GitHub Actions CI that tests the project and builds both
+  Docker images.
 
-- **Anomaly Detection**: Identify suspicious network traffic patterns
-- **ML-Powered**: Built with scikit-learn, TensorFlow/PyTorch
-- **Feature Extraction**: Advanced network flow feature engineering
-- **Model Evaluation**: Comprehensive metrics (precision, recall, F1, ROC-AUC)
-- **Reproducible Inference**: Dockerized CPU batch prediction
-- **Logging & Monitoring**: Full audit trail of predictions
-
-## Project Structure
-
-```
-ML_NIDS/
-├── data/
-│   ├── raw/          # Original datasets (CICIDS2018, NSL-KDD, etc.)
-│   ├── processed/    # Cleaned & normalized data
-│   └── splits/       # Train/test/validation splits
-├── models/
-│   ├── saved/        # Trained model checkpoints
-│   ├── configs/      # Model architecture configurations
-│   └── evaluation/   # Performance metrics & results
-├── src/
-│   ├── config.py              # Configuration management
-│   ├── train.py               # Training pipeline
-│   ├── predict.py             # Inference pipeline
-│   ├── models.py              # Model definitions
-│   ├── data_preprocessing.py  # Data cleaning & normalization
-│   ├── feature_extraction.py  # Feature engineering
-│   ├── evaluate.py            # Evaluation metrics
-│   └── utils.py               # Helper functions & logging
-├── tests/            # Unit tests
-├── scripts/          # Utility scripts (download data, splits)
-├── logs/             # Training & inference logs
-├── deployment/       # FastAPI/Flask deployment
-└── notebooks/        # Jupyter notebooks for EDA
-```
-
-## Installation
+## 3. Project Setup
 
 ### Prerequisites
-- Python 3.14 (the recorded training and release environment)
-- pip or conda
 
-### Setup
+- Python 3.14 (the recorded release environment).
+- Docker Desktop for Docker batch inference or the API service.
+- A local trained artifact for inference, such as
+  `models/saved/xgb_v10_regularized_fine_threshold.pkl`.
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/ML-NIDS.git
-   cd ML-NIDS
-   ```
+### Install locally
 
-2. **Create a virtual environment**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+```powershell
+git clone https://github.com/higaziadam/ML-NIDS.git
+cd ML-NIDS
 
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 
-4. **Install the package (development mode)**
-   ```bash
-   pip install -e .
-   ```
+python -m pip install --upgrade pip
+python -m pip install -r requirements-dev.txt
+```
 
-## Quick Start
+For runtime-only local dependencies, install `requirements.txt` instead of
+`requirements-dev.txt`.
 
-### Reproduce a frozen candidate
+## 4. Project Structure
 
-The command below creates a new artifact and refuses to overwrite the tracked
-V10 output paths. Use it only with the CICIDS2018 development data.
+```text
+ML-NIDS/
+├── .github/workflows/ci.yml        # Test and Docker-build automation
+├── data/                           # Local datasets and generated splits (ignored)
+│   ├── raw/
+│   ├── processed/
+│   ├── splits/
+│   └── final_holdout/
+├── experiments/experiments.md      # Experiment history and interpretation
+├── models/
+│   ├── configs/                    # Frozen candidate profiles
+│   ├── saved/                      # Local model artifacts (ignored)
+│   └── evaluation/                 # Local evaluation outputs (ignored)
+├── scripts/prepare_kaggle_data.py  # CICIDS2018 preparation utility
+├── src/
+│   ├── api.py                      # FastAPI inference service
+│   ├── config.py                   # Default runtime configuration
+│   ├── data_preprocessing.py       # Fitted preprocessing utilities
+│   ├── evaluate.py                 # Metrics and threshold evaluation
+│   ├── predict.py                  # Batch prediction pipeline
+│   ├── train.py                    # Training pipeline
+│   └── validation.py               # Holdout and cross-validation workflow
+├── tests/                          # Automated tests and small safe fixtures
+├── Dockerfile                      # Batch-inference image
+├── Dockerfile.api                  # FastAPI image
+├── compose.yaml                    # Local API service
+├── requirements.txt                # Python dependencies
+└── requirements-runtime.txt        # Pinned Docker model runtime
+```
+
+## 5. Quickstart
+
+The quickest path depends on whether you already have a model artifact.
+
+### Reproduce a separate V10 artifact
+
+Place prepared CICIDS2018 training data at `data/processed/train_data.csv`,
+then run the frozen profile with a new name. This avoids overwriting V10.
 
 ```powershell
 .\venv\Scripts\python.exe -m src.train `
@@ -96,7 +107,7 @@ V10 output paths. Use it only with the CICIDS2018 development data.
   --name xgb_v10_reproduction
 ```
 
-### Batch prediction
+### Make a local batch prediction
 
 ```powershell
 .\venv\Scripts\python.exe -m src.predict `
@@ -105,163 +116,115 @@ V10 output paths. Use it only with the CICIDS2018 development data.
   --output output\predictions.csv
 ```
 
-## Datasets
+The input CSV must include every feature expected by the chosen artifact. The
+API `GET /schema` endpoint can reveal that contract for a running API service.
 
-Supported datasets:
-- **CICIDS2018**: Canadian Institute for Cybersecurity dataset
-- **NSL-KDD**: Standard benchmark for intrusion detection
-- **KDD99**: Classic DARPA dataset
-- **UNSW-NB15**: Australian network traffic dataset
+## 6. Usage
 
-## Usage
+### Prepare CICIDS2018 data
 
-### 1. Prepare Data
+With supported source parquet files available locally, run:
 
-```bash
-python scripts/download_data.py
-python scripts/generate_splits.py
+```powershell
+.\venv\Scripts\python.exe scripts\prepare_kaggle_data.py `
+  --data-dir data `
+  --output-dir data\processed
 ```
 
-### 2. Train Model
+For an evaluation workflow that creates one development/final-holdout split,
+produce one labeled source file instead:
 
-```bash
-python -m src.train --data data/processed/train_data.csv --model xgboost --name experiment_name
+```powershell
+.\venv\Scripts\python.exe scripts\prepare_kaggle_data.py `
+  --data-dir data `
+  --output-dir data\processed `
+  --single-source `
+  --output-file cicids2018_labeled.csv
 ```
 
-### 3. Evaluate a saved model
+### Train an experiment
 
-```bash
-python -m src.validation final-evaluate --data data/processed/evaluation.csv --model models/saved/model.pkl --name evaluation_name
+```powershell
+.\venv\Scripts\python.exe -m src.train `
+  --data data\processed\train_data.csv `
+  --model xgboost `
+  --name experiment_name
 ```
 
-### 4. Make Predictions
+### Use the protected validation workflow
 
-```bash
-python -m src.predict --model models/saved/model.pkl --data data/processed/test.csv --output output/predictions.csv
+Create the holdout once, run cross-validation on development data only, and
+evaluate the final holdout once after freezing the candidate. Do not use a
+final-holdout result to tune that same candidate.
+
+```powershell
+.\venv\Scripts\python.exe -m src.validation create-holdout `
+  --data data\processed\cicids2018_labeled.csv `
+  --name candidate_holdout
+
+.\venv\Scripts\python.exe -m src.validation cross-validate `
+  --data data\final_holdout\candidate_holdout\development.csv `
+  --config models\configs\xgb_v10_candidate.json `
+  --name candidate_cv `
+  --folds 5
 ```
 
-## Configuration
+For the full V10 safeguards and one-time final-evaluation command, see
+[RELEASE_V10.md](RELEASE_V10.md).
 
-Edit `src/config.py` to configure:
-- Data paths
-- Model hyperparameters
-- Training parameters
-- Logging settings
+## 7. Use It via API & Docker
 
-Example:
-```python
-CONFIG = {
-    'model_type': 'random_forest',
-    'hyperparameters': {
-        'n_estimators': 100,
-        'max_depth': 20,
-        'random_state': 42
-    },
-    'train_test_split': 0.8,
-    'random_seed': 42
-}
+### FastAPI service
+
+The API loads one model artifact at startup. The default Compose configuration
+expects this local file:
+
+```text
+models/saved/xgb_v10_regularized_fine_threshold.pkl
 ```
 
-## Evaluation status and limitations
-
-| Evaluation | Accuracy | Precision | Attack recall | FPR | Interpretation |
-|---|---:|---:|---:|---:|---|
-| V10 final CICIDS2018 holdout | 98.05% | 98.24% | 91.91% | 0.41% | Selected low-alert internal candidate; narrowly missed the project recall policy. |
-| V14 CIC-IDS2017 external test | 76.04% | 15.34% | 4.81% | 6.51% | Major cross-dataset generalization gap; not suitable for production claims. |
-
-V10 was selected for its low false-positive operating point, which reduces alert
-backlog. The external result must not be used for further threshold/model tuning.
-It demonstrates that a model trained on CICIDS2018 does not automatically
-generalize to CIC-IDS2017. A production deployment requires fresh representative
-labeled traffic, monitoring, and retraining/validation under the target network's
-conditions.
-
-## Testing
-
-Run unit tests:
-```bash
-pytest tests/
-pytest tests/ --cov=src  # With coverage
-```
-
-## Deployment
-
-### FastAPI inference service
-
-The API is inference-only: it loads one frozen artifact at startup and never
-trains, tunes, or persists submitted flows. Start it with the mounted V10
-artifact:
+Start the service:
 
 ```powershell
 docker compose up --build -d
-Invoke-RestMethod http://localhost:8000/health
 ```
 
-Open `http://localhost:8000/docs` for interactive OpenAPI documentation. The
-service provides:
+Open interactive API documentation at <http://localhost:8000/docs>.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /health` | Confirms the service and reports model version, feature count, and threshold. |
-| `GET /schema` | Returns the exact feature names required by the mounted model. |
-| `POST /predict` | Scores one or more numeric flow records using the saved preprocessor and threshold. |
+| `GET /health` | Returns service readiness, model version, feature count, and threshold. |
+| `GET /schema` | Returns the exact required feature names for the loaded artifact. |
+| `POST /predict` | Returns a label and attack probability for one or more flow records. |
 
-Before calling `POST /predict`, retrieve the model schema:
+Check the API and retrieve the feature contract:
 
 ```powershell
+Invoke-RestMethod http://localhost:8000/health
 Invoke-RestMethod http://localhost:8000/schema
 ```
 
-Then send all of those numeric fields in each record. For example, create a
-JSON request with the returned field names and submit it:
-
-```powershell
-Invoke-RestMethod http://localhost:8000/predict `
-  -Method Post `
-  -ContentType 'application/json' `
-  -Body '{"records":[{"feature_name":123.4}]}'
-```
-
-The example payload is illustrative: `feature_name` must be replaced by every
-feature returned by `GET /schema`. Missing, non-numeric, or non-finite fields
-are rejected with HTTP 422. Stop the local service with:
+`POST /predict` requires every feature returned by `GET /schema`. The Swagger
+page contains a valid V10 example. Stop the service with:
 
 ```powershell
 docker compose down
 ```
 
-This local API has no authentication, TLS termination, persistent request log,
-or horizontal scaling by default. Set an API key before exposing predictions:
-
-```powershell
-$env:API_KEY = 'replace-with-a-long-random-secret'
-docker compose up --build -d
-```
-
-When `API_KEY` is set, callers must include the matching `X-API-Key` header on
-`POST /predict`. Health and schema endpoints remain unauthenticated for local
-orchestrator checks. Prediction requests are limited to 1 MiB and 60 requests
-per client IP per 60 seconds by default; override `MAX_REQUEST_BYTES`,
-`RATE_LIMIT_REQUESTS`, and `RATE_LIMIT_WINDOW_SECONDS` through environment
-variables. These limits are in-memory and apply to one container only. Put the
-service behind an authenticated HTTPS reverse proxy with centralized rate
-limiting, monitoring, and secret management before public or multi-instance
-deployment.
-
 ### Docker batch prediction
 
-Build the image from the repository root:
+Build the batch image:
 
 ```powershell
 docker build -t ml-nids:local .
 ```
 
-Create an output directory, then mount your model directory, input directory,
-and output directory. The image contains code and dependencies only; it never
-contains your datasets or trained model.
+Run it with local model, input, and output directories mounted into the
+container:
 
 ```powershell
 New-Item -ItemType Directory -Force output
+
 docker run --rm `
   -v "${PWD}/models:/app/models:ro" `
   -v "${PWD}/data/processed:/app/input:ro" `
@@ -272,51 +235,78 @@ docker run --rm `
   --output /app/output/predictions.csv
 ```
 
-The selected model must be present locally under `models/saved/`, and the input
-CSV must contain the feature columns expected by that model. Results are
-written to `output/predictions.csv`. This is a batch CLI container, not an HTTP
-service; no port mapping is required.
+The image contains code and dependencies only. It does not embed datasets or
+model artifacts.
 
-## Contributing
+## 8. Configuration
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit changes: `git commit -m "Add your feature"`
-4. Push to branch: `git push origin feature/your-feature`
-5. Submit a pull request
+### Application and release profiles
 
-## License
+- [src/config.py](src/config.py) contains default paths, model settings, logging,
+  and dataset defaults.
+- [models/configs/xgb_v10_candidate.json](models/configs/xgb_v10_candidate.json)
+  is the frozen V10 profile. It records preprocessing, XGBoost parameters, and
+  the selected threshold of `0.26`.
+- Use a release profile with `--config`; do not override its model type, split,
+  or threshold settings during reproduction.
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+### API environment variables
 
-## Citation
+| Variable | Default | Purpose |
+|---|---:|---|
+| `MODEL_PATH` | V10 artifact path in the container | Artifact loaded by the API at startup. |
+| `API_KEY` | Empty | If set, `POST /predict` requires it in the `X-API-Key` header. |
+| `MAX_REQUEST_BYTES` | `1048576` | Maximum declared request size for predictions. |
+| `RATE_LIMIT_REQUESTS` | `60` | Per-client prediction requests allowed in the window. |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60` | In-memory rate-limit window. |
 
-If you use this project in your research, please cite:
+Never commit real API keys or external datasets. The included rate limit is
+per-container; use centralized controls for multi-instance deployment.
 
-```bibtex
-@software{mlnids2024,
-  author = {Your Name},
-  title = {ML-NIDS: Machine Learning-based Network Intrusion Detection System},
-  year = {2024},
-  url = {https://github.com/yourusername/ML-NIDS}
-}
+## 9. Results
+
+| Version | Evaluation | Accuracy | Precision | Attack Recall | FPR | Interpretation |
+|---|---|---:|---:|---:|---:|---|
+| V10 | CICIDS2018 final holdout | 98.05% | 98.24% | 91.91% | 0.41% | Selected low-alert internal candidate; it narrowly missed the 92% recall policy. |
+| V13 | CICIDS2018 5-fold fixed-threshold CV | 98.08% | 98.53% | 92.16% | 0.36% | Feature-expanded candidate with all reported folds policy-compliant. |
+| V14 | CIC-IDS2017 external evaluation | 76.04% | 15.34% | 4.81% | 6.51% | Major external generalization gap. |
+
+V10 was selected because its low false-positive operating point reduces alert
+backlog. V14 shows that performance on CICIDS2018 does not transfer
+automatically to CIC-IDS2017. Do not represent the system as production-ready
+without validation on representative target-network traffic.
+
+Detailed experiment history is available in
+[experiments/experiments.md](experiments/experiments.md).
+
+## 10. Testing
+
+Run the complete suite:
+
+```powershell
+.\venv\Scripts\python.exe -m pytest -q --basetemp temp\pytest
 ```
 
-## References
+The current suite contains 24 tests covering preprocessing, evaluation,
+release-profile validation, holdout/cross-validation safeguards, external-data
+schema preparation, batch prediction, and API behavior/protections.
 
-- [NSL-KDD Dataset](https://www.unb.ca/cic/datasets/nsl.html)
-- [CICIDS2018 Dataset](https://www.unb.ca/cic/datasets/ids-2018.html)
-- [Scikit-learn Documentation](https://scikit-learn.org/)
-- [TensorFlow Documentation](https://www.tensorflow.org/)
+GitHub Actions runs this test suite and builds both Docker images on pushes and
+pull requests to `main`.
 
-## Support
+## 11. Deployment
 
-For issues, questions, or suggestions, please open an [GitHub Issue](https://github.com/yourusername/ML-NIDS/issues).
+The local deployment path is Docker Compose plus the FastAPI service. The API
+is inference-only: it loads a frozen artifact and does not train, tune, or
+persist submitted flow records.
 
-## Authors
+Before exposing the service outside a trusted local environment:
 
-- Adam Higazi
+- Set a strong `API_KEY` and manage it outside source control.
+- Put the service behind HTTPS and an authenticated reverse proxy.
+- Use centralized rate limiting, monitoring, and secret management.
+- Validate or retrain the model using representative target-network traffic.
 
----
-
-**Last Updated**: August 2026
+The current Docker health check, request-size limit, and in-memory rate limiter
+are useful local safeguards, but they are not substitutes for production
+infrastructure controls.
