@@ -945,7 +945,8 @@ SHA-256: `CDE4E1A9439D7B9F5B96150E5EF838FC4B9C3012C85DD7843B798EA437ED7054`
 `models/configs/xgb_v14_cicids2017_compatible_candidate.json`
 
 #### Status
-Frozen for cross-dataset evaluation after development-only cross-validation.
+Frozen and evaluated once on the prepared CIC-IDS2017 external dataset. This
+result must not be used to tune V14 further.
 
 #### Fixed-Threshold Cross-Validation Results
 
@@ -961,15 +962,41 @@ All five outer folds used threshold `0.26` and met both policy targets.
 | PR-AUC | 0.9802 | 0.0002 |
 | False-Positive Rate | 0.00351 | 0.00011 |
 
+#### CIC-IDS2017 Cross-Dataset Evaluation
+
+The frozen artifact was evaluated once at threshold `0.26` on 2,827,876 prepared
+CIC-IDS2017 flows (2,271,320 benign; 556,556 attack). No model or threshold
+changes were made after this result.
+
+| Metric | Value |
+|---|---:|
+| Accuracy | 0.7604 |
+| Precision | 0.1534 |
+| Recall (attack) | 0.0481 |
+| F1-Score | 0.0733 |
+| ROC-AUC | 0.6162 |
+| PR-AUC | 0.2783 |
+| False-Positive Rate | 0.0651 |
+| False-Negative Rate | 0.9519 |
+
+```
+                 Predicted Benign    Predicted Attack
+Actual Benign        2,123,467               147,853
+Actual Attack          529,761                26,795
+```
+
 #### Notes
-- V14 retains cross-validation policy compliance after removing `Protocol`.
-- Compared with V13, recall decreased by only 0.01 percentage points while FPR
-  decreased from 0.362% to 0.351%.
-- Train the frozen V14 artifact, then run the one-time CIC-IDS2017 cross-dataset
-  evaluation. Do not alter V14 after that evaluation.
+- V14 retained cross-validation policy compliance on CICIDS2018 after removing
+  `Protocol`, but it did not generalize to CIC-IDS2017: attack recall fell to
+  4.81% and the false-positive rate rose to 6.51%.
+- This is evidence of cross-dataset distribution, capture-environment, and/or
+  flow-feature differences. It is not a production-ready external result.
+- Preserve this result as final evidence for V14; do not tune against it or
+  create another version from these labels. Future improvement work needs a new,
+  separately held-out external dataset or a clearly separate development track.
 
 #### Evaluation Report
-`models/evaluation/xgb_v14_cicids2017_compatible_cv/fixed_threshold_summary.csv`
+`models/evaluation/xgb_v14_cicids2017_cross_dataset_final/metrics.csv`
 
 ---
 
@@ -990,7 +1017,7 @@ All five outer folds used threshold `0.26` and met both policy targets.
 | V11 | XGBoost | 0.9802 | 0.9826 | 0.9215 | 0.9511 | 0.9906 | 2026-08-13 | Policy-compliant: threshold 0.27, FPR 0.43% |
 | V12 | XGBoost (5-fold CV) | 0.9801 | 0.9823 | 0.9212 | 0.9508 | 0.9904 | 2026-08-20 | Rejected: marginal recall gain; FPR increased to 0.44% |
 | V13 | XGBoost (5-fold CV) | 0.9808 | 0.9853 | 0.9216 | 0.9524 | 0.9914 | 2026-08-20 | Frozen candidate; all fixed-threshold folds policy-compliant, FPR 0.36% |
-| V14 | XGBoost (5-fold CV) | 0.9809 | 0.9857 | 0.9215 | 0.9525 | 0.9913 | 2026-08-20 | Frozen for CIC-IDS2017 cross-dataset evaluation; FPR 0.35% |
+| V14 | XGBoost (external test) | 0.7604 | 0.1534 | 0.0481 | 0.0733 | 0.6162 | 2026-08-20 | Final CIC-IDS2017 test exposed major cross-dataset generalization gap |
 
 ---
 
