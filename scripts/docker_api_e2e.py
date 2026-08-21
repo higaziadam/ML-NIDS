@@ -85,7 +85,10 @@ def _wait_for_health(base_url: str, deadline_seconds: float = 75.0) -> dict[str,
             health = _request_json(f"{base_url}/health")
             if health.get("status") == "ok":
                 return health
-        except (URLError, RemoteDisconnected, TimeoutError, json.JSONDecodeError) as exc:
+        # A just-started container can accept a TCP connection and reset it
+        # before Uvicorn is ready to return an HTTP response.  Treat that as a
+        # transient readiness condition, like a refused connection or timeout.
+        except (OSError, URLError, RemoteDisconnected, TimeoutError, json.JSONDecodeError) as exc:
             last_error = exc
         time.sleep(1)
     raise RuntimeError(f"API did not become healthy within {deadline_seconds:.0f} seconds: {last_error}")
@@ -100,7 +103,7 @@ def _wait_for_prometheus_metric(base_url: str, query: str, deadline_seconds: flo
             payload = _request_json(f"{base_url}/api/v1/query?{urlencode({'query': query})}")
             if payload.get("status") == "success" and payload.get("data", {}).get("result"):
                 return
-        except (URLError, RemoteDisconnected, TimeoutError, json.JSONDecodeError) as exc:
+        except (OSError, URLError, RemoteDisconnected, TimeoutError, json.JSONDecodeError) as exc:
             last_error = exc
         time.sleep(1)
     raise RuntimeError(f"Prometheus did not scrape {query!r} within {deadline_seconds:.0f} seconds: {last_error}")
