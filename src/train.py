@@ -53,10 +53,43 @@ def load_training_data(
     
     X = data.drop(columns=[label_column])
     y = data[label_column]
+    _validate_binary_label_contract(y)
     
     logger.info(f"Data loaded: {X.shape[0]} samples, {X.shape[1]} features")
     
     return X, y
+
+
+def _validate_binary_label_contract(labels: pd.Series | np.ndarray) -> None:
+    """Require the project-wide 0=benign, 1=attack label encoding."""
+    observed = set(pd.Series(labels).dropna().unique().tolist())
+    if observed != {0, 1}:
+        raise ValueError(
+            "ML-NIDS binary training requires labels encoded exactly as "
+            "0 (benign) and 1 (attack); "
+            f"found {sorted(observed)}."
+        )
+
+
+def model_hyperparameters(
+    runtime_config: Mapping[str, Any], model_type: str
+) -> dict[str, Any]:
+    """Return only parameters intended for the requested model type.
+
+    Release profiles use a flat, model-specific parameter object, while the
+    default configuration stores a parameter object for each supported model.
+    """
+    configured = runtime_config["model"].get("hyperparameters", {})
+    if not isinstance(configured, Mapping):
+        raise ValueError("Model hyperparameters must be a mapping.")
+    if model_type in configured:
+        selected = configured[model_type]
+        if not isinstance(selected, Mapping):
+            raise ValueError(f"Hyperparameters for '{model_type}' must be a mapping.")
+        return dict(selected)
+    if any(name in configured for name in ModelFactory.get_available_models()):
+        raise ValueError(f"No hyperparameters configured for model type '{model_type}'.")
+    return dict(configured)
 
 
 def preprocess_data(
@@ -215,9 +248,11 @@ def _binary_probabilities(model: object, X: np.ndarray) -> Tuple[np.ndarray, Any
     probabilities = model.predict_proba(X)
     estimator = getattr(model, "model", model)
     classes = np.asarray(getattr(estimator, "classes_", []))
-    if probabilities.ndim != 2 or probabilities.shape[1] != 2 or len(classes) != 2:
+    if probabilities.ndim != 2 or probabilities.shape[1] != 2 or set(classes.tolist()) != {0, 1}:
         raise ValueError("Threshold tuning requires a fitted binary classifier with two probability columns.")
-    return probabilities[:, 1], classes[0], classes[1]
+    attack_index = int(np.flatnonzero(classes == 1)[0])
+    benign_index = int(np.flatnonzero(classes == 0)[0])
+    return probabilities[:, attack_index], classes[benign_index], classes[attack_index]
 
 
 def train_model(
@@ -248,10 +283,11 @@ def train_model(
             f"{distribution}. Disable destructive cleaning (especially outlier removal) "
             "or provide training data containing both classes."
         )
+    _validate_binary_label_contract(y_train)
     
     # Use hyperparameters from config if not provided
     if not model_kwargs:
-        model_kwargs = CONFIG["model"]["hyperparameters"]
+        model_kwargs = model_hyperparameters(CONFIG, model_type)
     
     with Timer(f"Training {model_type} model"):
         model = create_model(model_type, **model_kwargs)
@@ -563,7 +599,7 @@ def train_pipeline(
             X_train_np,
             y_train_np,
             model_type=model_type,
-            **runtime_config["model"]["hyperparameters"],
+            **model_hyperparameters(runtime_config, model_type),
         )
 
         validation_probabilities, _, positive_class = _binary_probabilities(model, X_val_np)

@@ -90,6 +90,9 @@ def make_predictions(
     Returns:
         Predictions, probabilities
     """
+    X = np.asarray(X)
+    if X.ndim != 2:
+        raise ValueError(f"Inference features must be a 2D array, got shape {X.shape}.")
     if threshold is None:
         threshold = model.get("threshold", CONFIG["inference"].get("prediction_threshold", 0.5)) if isinstance(model, dict) else CONFIG["inference"].get("prediction_threshold", 0.5)
     if not 0.0 < threshold < 1.0:
@@ -104,10 +107,14 @@ def make_predictions(
         probabilities = trained_model.predict_proba(X)
         estimator = getattr(trained_model, "model", trained_model)
         classes = np.asarray(getattr(estimator, "classes_", []))
-        if probabilities.ndim != 2 or probabilities.shape[1] != 2 or len(classes) != 2:
-            raise ValueError("Threshold-based inference requires a binary classifier with two probability columns.")
-        attack_probabilities = probabilities[:, 1]
-        y_pred = np.where(attack_probabilities >= threshold, classes[1], classes[0])
+        if probabilities.ndim != 2 or probabilities.shape[1] != 2 or set(classes.tolist()) != {0, 1}:
+            raise ValueError(
+                "Threshold-based ML-NIDS inference requires a binary classifier "
+                "with classes 0 (benign) and 1 (attack)."
+            )
+        attack_index = int(np.flatnonzero(classes == 1)[0])
+        attack_probabilities = probabilities[:, attack_index]
+        y_pred = np.where(attack_probabilities >= threshold, 1, 0)
         y_proba = attack_probabilities if return_probabilities else None
     
     logger.info(f"Predictions complete")

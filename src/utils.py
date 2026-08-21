@@ -3,6 +3,7 @@ Utility functions for ML-NIDS including logging, metrics, and data loading.
 """
 
 import logging
+from logging.handlers import RotatingFileHandler
 import json
 import pickle
 from pathlib import Path
@@ -67,7 +68,11 @@ def setup_logger(name: str, log_level: str = None) -> logging.Logger:
     log_file = LOGGING_CONFIG["log_file"]
     try:
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(log_file)
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=LOGGING_CONFIG["max_bytes"],
+            backupCount=LOGGING_CONFIG["backup_count"],
+        )
         file_handler.setLevel(getattr(logging, log_level))
         file_handler.setFormatter(formatter)
         logger_instance.addHandler(file_handler)

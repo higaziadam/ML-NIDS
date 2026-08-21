@@ -35,8 +35,8 @@ because of their size and provenance.
 - FastAPI inference service with interactive OpenAPI documentation.
 - API schema discovery, optional API-key protection, request-size limits,
   single-container rate limiting, and Docker health checks.
-- Automated tests and GitHub Actions CI that tests the project and builds both
-  Docker images.
+- Automated tests and GitHub Actions quality gates for release metadata,
+  dependencies, Dockerfiles, and container images.
 
 ## 3. Project Setup
 
@@ -362,13 +362,26 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m pytest -q --basetemp temp\pytest
 ```
 
-The current suite contains 29 tests covering preprocessing, evaluation,
+The current suite contains 37 tests covering preprocessing, evaluation,
 release-profile validation, holdout/cross-validation safeguards, external-data
 schema preparation, batch prediction, flow ingestion, live-file handling, API
 latency reporting, and API behavior/protections.
 
-GitHub Actions runs this test suite and builds both Docker images on pushes and
-pull requests to `main`.
+Run the deterministic V10 release-profile gate locally with:
+
+```powershell
+.\venv\Scripts\python.exe -m src.quality_gates `
+  --profile models\configs\xgb_v10_candidate.json `
+  --output temp\quality-gates\v10_release_profile.json
+```
+
+The gate validates the tracked V10 label contract, threshold policy, recorded
+validation/test recall and false-positive rate, and artifact hash metadata. It
+does not retrain or reevaluate the ignored full dataset in CI.
+
+GitHub Actions runs the test suite, V10 quality gate, dependency audit,
+Dockerfile linting, and high/critical vulnerability scans for both Docker
+images. Pull requests also receive a dependency-change review.
 
 ## 11. Deployment
 

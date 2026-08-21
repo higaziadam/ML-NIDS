@@ -1,10 +1,11 @@
 """End-to-end tests for persisted-artifact batch prediction."""
 
 import pandas as pd
+import pytest
 from sklearn.ensemble import RandomForestClassifier
 
 from src.data_preprocessing import DataPreprocessor
-from src.predict import predict_pipeline
+from src.predict import make_predictions, predict_pipeline
 from src.utils import save_model
 
 
@@ -49,3 +50,11 @@ def test_prediction_pipeline_loads_artifact_and_writes_csv(tmp_path) -> None:
     assert saved.columns.tolist() == ["prediction", "probability"]
     assert saved["prediction"].isin([0, 1]).all()
     assert saved["probability"].between(0, 1).all()
+
+
+def test_inference_rejects_artifact_without_zero_one_label_contract() -> None:
+    classifier = RandomForestClassifier(n_estimators=5, random_state=42).fit(
+        [[0.0], [1.0]], ["benign", "attack"]
+    )
+    with pytest.raises(ValueError, match=r"classes 0 \(benign\) and 1 \(attack\)"):
+        make_predictions(classifier, [[0.5]])

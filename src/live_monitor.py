@@ -103,14 +103,30 @@ class FlowDirectoryMonitor:
                 batch_size=self.batch_size,
                 timeout=self.timeout,
             )
-            archived = self._move_to(source, self.processed_dir)
-            self._observations.pop(source, None)
-            return {"status": "processed", "source_file": str(archived), "manifest": manifest}
         except Exception as exc:
             failed = self._record_failure(source, exc)
             self._observations.pop(source, None)
             logger.exception("Failed to process flow export %s", source)
             return {"status": "failed", "source_file": str(failed), "error": str(exc)}
+
+        try:
+            archived = self._move_to(source, self.processed_dir)
+        except Exception as exc:
+            # The score already exists, so do not let the watcher retry and
+            # duplicate it. Quarantine the source with an explicit status.
+            failed = self._record_failure(source, exc)
+            self._observations.pop(source, None)
+            logger.exception("Scored flow export but could not archive %s", source)
+            return {
+                "status": "scored_archive_failed",
+                "source_file": str(failed),
+                "output_path": str(output),
+                "manifest": manifest,
+                "error": str(exc),
+            }
+
+        self._observations.pop(source, None)
+        return {"status": "processed", "source_file": str(archived), "manifest": manifest}
 
     def scan_once(self) -> list[dict[str, object]]:
         """Observe incoming CSV files and process only stable completed files."""

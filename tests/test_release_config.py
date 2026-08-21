@@ -69,7 +69,7 @@ def test_release_profile_overrides_active_experiment_config(tmp_path) -> None:
     assert runtime_config["model"]["model_type"] == "xgboost"
     assert runtime_config["model"]["hyperparameters"]["scale_pos_weight"] == 1.0
     assert runtime_config["threshold"]["candidates"] == [0.24, 0.25, 0.26, 0.27]
-    assert CONFIG["model"]["hyperparameters"]["scale_pos_weight"] == 1.10
+    assert CONFIG["model"]["hyperparameters"]["xgboost"]["scale_pos_weight"] == 1.10
 
 
 def test_release_profile_rejects_invalid_label_contract(tmp_path) -> None:

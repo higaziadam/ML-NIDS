@@ -105,6 +105,12 @@ def _validate_artifact(artifact: object) -> dict:
     missing = sorted(required.difference(artifact))
     if missing:
         raise RuntimeError(f"Model artifact is missing required fields: {missing}")
+    estimator = getattr(artifact["model"], "model", artifact["model"])
+    classes = set(getattr(estimator, "classes_", []))
+    if classes != {0, 1}:
+        raise RuntimeError(
+            "The API requires an artifact trained with classes 0 (benign) and 1 (attack)."
+        )
     return artifact
 
 
@@ -161,11 +167,22 @@ def create_app(
                     content={"detail": f"Request body exceeds the {request_limit}-byte limit."},
                 )
 
+            # Content-Length is optional with streamed HTTP requests. Read the
+            # cached body once so the actual submitted size is enforced too.
+            if len(await request.body()) > request_limit:
+                return JSONResponse(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    content={"detail": f"Request body exceeds the {request_limit}-byte limit."},
+                )
+
             client_host = request.client.host if request.client else "unknown"
             now = time.monotonic()
+            for host, timestamps in list(request_timestamps.items()):
+                while timestamps and now - timestamps[0] >= rate_window:
+                    timestamps.popleft()
+                if not timestamps:
+                    del request_timestamps[host]
             timestamps = request_timestamps.setdefault(client_host, deque())
-            while timestamps and now - timestamps[0] >= rate_window:
-                timestamps.popleft()
             if len(timestamps) >= rate_limit:
                 retry_after = max(1, int(rate_window - (now - timestamps[0])))
                 return JSONResponse(

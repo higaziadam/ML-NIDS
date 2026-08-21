@@ -24,6 +24,7 @@ from src.release_config import (
 from src.train import (
     _binary_probabilities,
     engineer_features_for_holdouts,
+    model_hyperparameters,
     preprocess_data,
     preprocess_holdout_data,
     train_model,
@@ -153,7 +154,7 @@ def _fit_fold(
         X_train_np,
         y_train.to_numpy(),
         model_type=runtime_config["model"]["model_type"],
-        **runtime_config["model"]["hyperparameters"],
+        **model_hyperparameters(runtime_config, runtime_config["model"]["model_type"]),
     )
     validation_probabilities, negative_class, positive_class = _binary_probabilities(model, X_val_np)
     threshold, threshold_table = select_binary_threshold(

@@ -107,6 +107,8 @@ class RandomForestModel(BaseModel):
             n_jobs: Number of jobs for parallel processing
             class_weight: Handle class imbalance
         """
+        if kwargs:
+            raise TypeError(f"Unsupported Random Forest hyperparameters: {sorted(kwargs)}")
         super().__init__(model_type="random_forest")
         
         self.model = RandomForestClassifier(
@@ -194,6 +196,8 @@ class XGBoostModel(BaseModel):
             objective: XGBoost learning objective
             eval_metric: XGBoost evaluation metric
         """
+        if kwargs:
+            raise TypeError(f"Unsupported XGBoost hyperparameters: {sorted(kwargs)}")
         super().__init__(model_type="xgboost")
         if XGBClassifier is None:
             raise ImportError(
@@ -274,6 +278,8 @@ class SVMModel(BaseModel):
             probability: Enable probability estimates
             random_state: Random seed
         """
+        if kwargs:
+            raise TypeError(f"Unsupported SVM hyperparameters: {sorted(kwargs)}")
         super().__init__(model_type="svm")
         
         self.model = Pipeline([
