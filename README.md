@@ -30,6 +30,8 @@ because of their size and provenance.
 - Batch CSV prediction through Python or Docker.
 - CICFlowMeter-style CSV ingestion that normalizes supported headers and submits
   flow records to the API in batches.
+- Optional Dockerized directory watcher for completed CICFlowMeter CSV exports.
+- Measured API latency and throughput benchmark with JSON reports.
 - FastAPI inference service with interactive OpenAPI documentation.
 - API schema discovery, optional API-key protection, request-size limits,
   single-container rate limiting, and Docker health checks.
@@ -83,13 +85,16 @@ ML-NIDS/
 │   ├── data_preprocessing.py       # Fitted preprocessing utilities
 │   ├── evaluate.py                 # Metrics and threshold evaluation
 │   ├── flow_ingestion.py           # CICFlowMeter CSV-to-API adapter
+│   ├── live_monitor.py             # Watches completed flow-export CSVs
+│   ├── api_benchmark.py            # API latency and throughput measurement
 │   ├── predict.py                  # Batch prediction pipeline
 │   ├── train.py                    # Training pipeline
 │   └── validation.py               # Holdout and cross-validation workflow
 ├── tests/                          # Automated tests and small safe fixtures
 ├── Dockerfile                      # Batch-inference image
 ├── Dockerfile.api                  # FastAPI image
-├── compose.yaml                    # Local API service
+├── compose.yaml                    # Local API service and optional watcher
+├── runtime/                         # Local watcher input, alerts, archives (ignored)
 ├── requirements.txt                # Python dependencies
 └── requirements-runtime.txt        # Pinned Docker model runtime
 ```
@@ -242,6 +247,45 @@ $env:ML_NIDS_API_KEY = 'your-api-key'
 This adapter scores completed flows; it does not capture packets or generate
 flows from a network interface or PCAP file.
 
+### Live CICFlowMeter export watcher
+
+The optional watcher provides a near-real-time handoff for a separate flow
+exporter. It polls `runtime\incoming_flows`, waits for an export to remain
+unchanged for two polling intervals, scores it through the API, writes the
+scored CSV to `runtime\alerts`, and moves the source CSV to either
+`runtime\processed_flows` or `runtime\failed_flows`. A failure also creates an
+adjacent error JSON record. It never captures packets or monitors a NIC itself.
+
+Start the API and watcher together:
+
+```powershell
+docker compose --profile live up --build -d
+```
+
+Place only completed CICFlowMeter-compatible CSV files in
+`runtime\incoming_flows`. Stop both services with `docker compose down`.
+The entire `runtime` directory is ignored by Git so local flow records and
+alerts are not committed accidentally.
+
+### Measure API latency
+
+With the API running, benchmark the end-to-end inference request path using a
+compatible flow CSV:
+
+```powershell
+.\venv\Scripts\python.exe -m src.api_benchmark `
+  --input tests\fixtures\v10_cicflowmeter_sample.csv `
+  --output benchmarks\reports\api_latency.json `
+  --batch-sizes 1 10 100 `
+  --requests-per-size 10
+```
+
+The report records p50/p95/p99 and mean request latency plus flow throughput
+for each batch size. It includes local HTTP, API validation, preprocessing, and
+model inference; it excludes upstream packet capture and flow-export time.
+Keep the request count within the API rate-limit configuration or use a
+separate controlled benchmark deployment.
+
 ### Docker batch prediction
 
 Build the batch image:
@@ -318,9 +362,10 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m pytest -q --basetemp temp\pytest
 ```
 
-The current suite contains 26 tests covering preprocessing, evaluation,
+The current suite contains 29 tests covering preprocessing, evaluation,
 release-profile validation, holdout/cross-validation safeguards, external-data
-schema preparation, batch prediction, flow ingestion, and API behavior/protections.
+schema preparation, batch prediction, flow ingestion, live-file handling, API
+latency reporting, and API behavior/protections.
 
 GitHub Actions runs this test suite and builds both Docker images on pushes and
 pull requests to `main`.

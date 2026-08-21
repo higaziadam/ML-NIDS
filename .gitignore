@@ -149,6 +149,8 @@ logs/*
 
 # Local batch and flow-ingestion outputs
 output/
+runtime/
+benchmarks/reports/
 
 # Experiments
 experiments/results/*

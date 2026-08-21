@@ -14,3 +14,33 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
+
+  flow-watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    profiles: ["live"]
+    command:
+      - python
+      - -m
+      - src.live_monitor
+      - --input-dir
+      - /app/runtime/incoming_flows
+      - --alerts-dir
+      - /app/runtime/alerts
+      - --processed-dir
+      - /app/runtime/processed_flows
+      - --failed-dir
+      - /app/runtime/failed_flows
+      - --api-url
+      - http://nids-api:8000
+    environment:
+      ML_NIDS_API_KEY: ${API_KEY:-}
+    volumes:
+      - ./runtime:/app/runtime
+    depends_on:
+      nids-api:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    restart: unless-stopped
