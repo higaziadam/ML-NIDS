@@ -1,0 +1,17 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {"type": "stat", "title": "Request rate (5m)", "targets": [{"expr": "sum(rate(ml_nids_api_requests_total[5m]))", "refId": "A"}], "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}},
+    {"type": "stat", "title": "Error rate (5m)", "targets": [{"expr": "sum(rate(ml_nids_api_errors_total[5m])) / clamp_min(sum(rate(ml_nids_api_requests_total[5m])), 1)", "refId": "A"}], "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}},
+    {"type": "stat", "title": "Attack predictions (5m)", "targets": [{"expr": "sum(increase(ml_nids_attack_predictions_total[5m]))", "refId": "A"}], "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0}},
+    {"type": "stat", "title": "Drift review required", "targets": [{"expr": "ml_nids_drift_status{state=\"review_required\"}", "refId": "A"}], "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}},
+    {"type": "timeseries", "title": "p95 API latency", "targets": [{"expr": "histogram_quantile(0.95, sum(rate(ml_nids_api_request_duration_seconds_bucket[5m])) by (le, endpoint))", "refId": "A"}], "gridPos": {"h": 9, "w": 12, "x": 0, "y": 8}},
+    {"type": "timeseries", "title": "Flow volume by model", "targets": [{"expr": "sum(rate(ml_nids_flows_scored_total[5m])) by (model_version)", "refId": "A"}], "gridPos": {"h": 9, "w": 12, "x": 12, "y": 8}}
+  ],
+  "schemaVersion": 41,
+  "tags": ["ml-nids", "observability"],
+  "title": "ML-NIDS Overview",
+  "uid": "ml-nids-overview",
+  "version": 1
+}

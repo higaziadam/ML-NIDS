@@ -18,6 +18,7 @@ import time
 from typing import Any
 from http.client import RemoteDisconnected
 from urllib.error import URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import pandas as pd
@@ -90,6 +91,21 @@ def _wait_for_health(base_url: str, deadline_seconds: float = 75.0) -> dict[str,
     raise RuntimeError(f"API did not become healthy within {deadline_seconds:.0f} seconds: {last_error}")
 
 
+def _wait_for_prometheus_metric(base_url: str, query: str, deadline_seconds: float = 75.0) -> None:
+    """Verify Prometheus has scraped a non-empty ML-NIDS metric series."""
+    deadline = time.monotonic() + deadline_seconds
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            payload = _request_json(f"{base_url}/api/v1/query?{urlencode({'query': query})}")
+            if payload.get("status") == "success" and payload.get("data", {}).get("result"):
+                return
+        except (URLError, RemoteDisconnected, TimeoutError, json.JSONDecodeError) as exc:
+            last_error = exc
+        time.sleep(1)
+    raise RuntimeError(f"Prometheus did not scrape {query!r} within {deadline_seconds:.0f} seconds: {last_error}")
+
+
 def _compose_command(project_name: str) -> list[str]:
     return [
         "docker",
@@ -107,9 +123,11 @@ def main() -> None:
         raise RuntimeError("Docker is required for the API end-to-end integration test.")
 
     port = _free_local_port()
+    prometheus_port = _free_local_port()
     project_name = f"ml_nids_e2e_{os.getpid()}"
     environment = os.environ.copy()
     environment["ML_NIDS_E2E_PORT"] = str(port)
+    environment["ML_NIDS_E2E_PROMETHEUS_PORT"] = str(prometheus_port)
     command = _compose_command(project_name)
 
     if WORK_DIR.exists():
@@ -118,7 +136,7 @@ def main() -> None:
     try:
         _write_smoke_artifact(MODEL_PATH)
         subprocess.run(
-            [*command, "up", "--build", "--detach", "nids-api"],
+            [*command, "up", "--build", "--detach", "nids-api", "prometheus"],
             cwd=PROJECT_ROOT,
             env=environment,
             check=True,
@@ -141,6 +159,10 @@ def main() -> None:
             raise RuntimeError(f"Unexpected /predict response: {prediction}")
         if any(item.get("prediction") not in (0, 1) or not 0.0 <= float(item.get("probability", -1)) <= 1.0 for item in predictions):
             raise RuntimeError(f"Invalid prediction values returned by API: {prediction}")
+        _wait_for_prometheus_metric(
+            f"http://127.0.0.1:{prometheus_port}",
+            "ml_nids_flows_scored_total",
+        )
         print("Docker API end-to-end test passed.")
     except BaseException as exc:
         failure = exc

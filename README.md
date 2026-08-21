@@ -25,7 +25,11 @@ because of their size and provenance.
 - XGBoost and Random Forest experiment support.
 - Frozen release-profile configuration for reproducible candidate runs.
 - Training artifacts that retain the fitted preprocessor, ordered features, and
-  decision threshold.
+  decision threshold, dataset/model fingerprints, calibration diagnostics, and
+  a training-only feature-drift baseline.
+- Training-only randomized hyperparameter search, calibration analysis,
+  PSI-based drift reports, permutation-importance explainability, and
+  independent representative-data validation.
 - Final-holdout and nested cross-validation workflows.
 - Batch CSV prediction through Python or Docker.
 - CICFlowMeter-style CSV ingestion that normalizes supported headers and submits
@@ -35,6 +39,9 @@ because of their size and provenance.
 - FastAPI inference service with interactive OpenAPI documentation.
 - API schema discovery, optional API-key protection, request-size limits,
   single-container rate limiting, and Docker health checks.
+- Prometheus metrics for request volume, latency, errors, scored flows, attack
+  predictions, batch size, model version/threshold, and drift-review status;
+  with a provisioned Grafana dashboard.
 - Automated tests and GitHub Actions quality gates for release metadata,
   dependencies, Dockerfiles, and container images.
 
@@ -180,6 +187,62 @@ final-holdout result to tune that same candidate.
 For the full V10 safeguards and one-time final-evaluation command, see
 [RELEASE_V10.md](RELEASE_V10.md).
 
+### Govern the ML workflow
+
+Create a content-addressed dataset manifest before training or evaluation:
+
+```powershell
+.\venv\Scripts\python.exe -m src.ml_workflow dataset-manifest `
+  --data data\processed\train_data.csv `
+  --output experiments\results\train_dataset_manifest.json
+```
+
+Run randomized hyperparameter search only on development/training data, never
+on a final holdout or representative target-network dataset:
+
+```powershell
+.\venv\Scripts\python.exe -m src.tuning `
+  --data data\final_holdout\candidate_holdout\development.csv `
+  --model xgboost `
+  --iterations 10 `
+  --folds 3 `
+  --output experiments\results\xgb_random_search.csv
+```
+
+Newly trained artifacts include a training-only drift baseline; their result
+directories include calibration and drift files. Calibration measures
+probability reliability using Brier score and reliability bins. Drift uses
+Population Stability Index (PSI) to flag feature distribution changes.
+
+Evaluate a frozen artifact once against compatible, independently collected,
+labeled target-network traffic:
+
+```powershell
+.\venv\Scripts\python.exe -m src.ml_workflow representative-evaluate `
+  --model models\saved\candidate.pkl `
+  --data data\external\target_network_labeled.csv `
+  --output models\evaluation\target_network_validation
+```
+
+The report writes metrics, calibration, dataset provenance, and drift results.
+It cannot tune model parameters, features, or threshold.
+
+For operational review, create a PSI drift report from compatible incoming-flow
+data, or create a global permutation-importance report from labeled evaluation
+data:
+
+```powershell
+.\venv\Scripts\python.exe -m src.ml_workflow drift-report `
+  --model models\saved\candidate.pkl `
+  --data runtime\recent_flows.csv `
+  --output runtime\observability\drift_report.json
+
+.\venv\Scripts\python.exe -m src.ml_workflow explain `
+  --model models\saved\candidate.pkl `
+  --data data\external\target_network_labeled.csv `
+  --output models\evaluation\permutation_importance.csv
+```
+
 ## 7. Use It via API & Docker
 
 ### FastAPI service
@@ -218,6 +281,28 @@ page contains a valid V10 example. Stop the service with:
 ```powershell
 docker compose down
 ```
+
+### Observability: Prometheus and Grafana
+
+Start the API, Prometheus, and Grafana together. Set a non-default Grafana
+password before exposing the dashboard outside your local machine:
+
+```powershell
+$env:GRAFANA_ADMIN_PASSWORD = "use-a-long-unique-password"
+docker compose --profile observability up --build -d
+```
+
+Open Grafana at <http://localhost:3000> and sign in with the configured
+`GRAFANA_ADMIN_USER` (default `admin`). The provisioned **ML-NIDS Overview**
+dashboard shows request rate, error rate, p95 latency, attack predictions,
+flow volume by model version, and drift-review status. Prometheus is available
+at <http://localhost:9090> for local metric queries.
+
+`GET /metrics` exposes only aggregate, low-cardinality labels (`endpoint`,
+HTTP method/status, and model version). It never emits flow payloads, client
+IP addresses, API keys, or feature values. To publish PSI drift state, write a
+drift report to `runtime\observability\drift_report.json`; the API refreshes
+the status when Prometheus scrapes `/metrics`.
 
 ### CICFlowMeter CSV-to-API adapter
 
@@ -362,7 +447,7 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m pytest -q --basetemp temp\pytest
 ```
 
-The current suite contains 46 fast unit tests covering preprocessing, evaluation,
+The current suite contains 50 fast unit tests covering preprocessing, evaluation,
 release-profile validation, holdout/cross-validation safeguards, external-data
 schema preparation, batch prediction, flow ingestion, live-file handling, API
 latency reporting, and API behavior/protections.

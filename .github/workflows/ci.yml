@@ -32,7 +32,7 @@ jobs:
         run: python -m pip install --upgrade pip && python -m pip install -r requirements-dev.txt
 
       - name: Run test suite
-        run: python -m pytest -q --basetemp temp/pytest
+        run: mkdir -p temp && python -m pytest -q --basetemp temp/pytest
 
       - name: Enforce undefined-name and unused-code checks
         run: python -m flake8 src scripts tests --select=F
@@ -94,7 +94,7 @@ jobs:
           python -m scripts.docker_api_e2e
 
       - name: Scan batch image for high and critical vulnerabilities
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ml-nids:ci
           format: table
@@ -104,7 +104,7 @@ jobs:
           vuln-type: os,library
 
       - name: Scan API image for high and critical vulnerabilities
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ml-nids-api:ci
           format: table

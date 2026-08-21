@@ -86,3 +86,20 @@ def test_predict_enforces_request_size_and_rate_limits(tmp_path) -> None:
     assert first.headers["x-content-type-options"] == "nosniff"
     assert limited.status_code == 429
     assert limited.headers["retry-after"]
+
+
+def test_metrics_record_predictions_without_request_payloads(tmp_path) -> None:
+    with TestClient(create_app(_write_artifact(tmp_path))) as client:
+        response = client.post(
+            "/predict",
+            json={"records": [{"flow_bytes": 1.5, "packet_count": 1.5}, {"flow_bytes": 9.5, "packet_count": 9.5}]},
+        )
+        metrics = client.get("/metrics").text
+
+    assert response.status_code == 200
+    assert "ml_nids_api_requests_total" in metrics
+    assert "ml_nids_api_request_duration_seconds" in metrics
+    assert "ml_nids_flows_scored_total" in metrics
+    assert "ml_nids_attack_predictions_total" in metrics
+    assert "model_version=\"api_test\"" in metrics
+    assert "flow_bytes" not in metrics and "packet_count" not in metrics

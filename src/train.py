@@ -28,6 +28,7 @@ from src.release_config import (
     runtime_config_from_profile,
     sha256_file,
 )
+from src.ml_workflow import build_drift_baseline, calibration_report
 
 
 def load_training_data(
@@ -420,6 +421,9 @@ def save_training_artifacts(
     runtime_config: Mapping[str, Any] = CONFIG,
     source_data_path: Optional[str] = None,
     release_profile_path: Optional[str] = None,
+    drift_baseline: Optional[dict[str, Any]] = None,
+    calibration: Optional[dict[str, Any]] = None,
+    calibration_table: Optional[pd.DataFrame] = None,
 ) -> None:
     """
     Save training artifacts.
@@ -450,6 +454,7 @@ def save_training_artifacts(
             "threshold": threshold,
             "model_version": model_name,
             "threshold_policy": dict(runtime_config["threshold"]),
+            "drift_baseline": drift_baseline,
         },
         model_path,
     )
@@ -471,6 +476,17 @@ def save_training_artifacts(
     X_test_with_label["label"] = y_test.values
     save_data(X_test_with_label, splits_dir / "test.csv")
     save_data(threshold_results, SAVED_MODELS_DIR / f"{model_name}_results" / "threshold_selection.csv")
+    results_dir = SAVED_MODELS_DIR / f"{model_name}_results"
+    if calibration_table is not None:
+        save_data(calibration_table, results_dir / "calibration.csv")
+    if calibration is not None:
+        with (results_dir / "calibration.json").open("w", encoding="utf-8") as handle:
+            json.dump(calibration, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+    if drift_baseline is not None:
+        with (results_dir / "drift_baseline.json").open("w", encoding="utf-8") as handle:
+            json.dump(drift_baseline, handle, indent=2, sort_keys=True)
+            handle.write("\n")
 
     metadata = {
         "model_name": model_name,
@@ -496,6 +512,7 @@ def save_training_artifacts(
         },
         "environment": _package_versions(),
         "git_commit": _git_commit_sha(),
+        "calibration": calibration,
     }
     metadata_path = SAVED_MODELS_DIR / f"{model_name}_metadata.json"
     with metadata_path.open("w", encoding="utf-8") as handle:
@@ -580,6 +597,9 @@ def train_pipeline(
             X_train, [X_val, X_test], y_train, runtime_config
         )
         X_val_eng, X_test_eng = holdout_features
+        # Persist a reference distribution in the exact raw feature schema
+        # expected by inference. It is fitted on training data only.
+        drift_baseline = build_drift_baseline(X_train_eng, X_train_eng.columns)
         
         # Fit one scaler on training features only, then use it for every later
         # split and for persisted inference.
@@ -607,6 +627,7 @@ def train_pipeline(
         )
 
         validation_probabilities, _, positive_class = _binary_probabilities(model, X_val_np)
+        calibration, calibration_table = calibration_report(y_val_np, validation_probabilities)
         validation_selected_threshold, threshold_results = select_binary_threshold(
             y_val_np,
             validation_probabilities,
@@ -655,6 +676,9 @@ def train_pipeline(
                 runtime_config,
                 data_path,
                 release_profile_path,
+                drift_baseline,
+                calibration,
+                calibration_table,
             )
         
         logger.info("Training pipeline complete")
