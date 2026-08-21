@@ -7,7 +7,7 @@ from logging.handlers import RotatingFileHandler
 import json
 import pickle
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Optional, Union
+from typing import Any, Dict, Tuple, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -19,11 +19,9 @@ from sklearn.metrics import (
     roc_auc_score,
     confusion_matrix,
     classification_report,
-    roc_curve,
-    auc,
 )
 
-from src.config import LOGGING_CONFIG, LOGS_DIR
+from src.config import LOGGING_CONFIG
 
 
 # ============================================================================

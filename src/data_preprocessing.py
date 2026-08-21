@@ -4,7 +4,7 @@ Data preprocessing utilities for ML-NIDS.
 Handles data cleaning, normalization, missing values, and outlier detection.
 """
 
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional, Dict
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
@@ -289,8 +289,8 @@ class DataSplitter:
         """
         from sklearn.model_selection import train_test_split
         
-        if not all(0 <= size < 1 for size in (train_size, test_size, val_size)):
-            raise ValueError("Split sizes must be in the range [0, 1).")
+        if not 0 < train_size < 1 or not 0 < test_size < 1 or not 0 <= val_size < 1:
+            raise ValueError("train_size and test_size must be in (0, 1); val_size must be in [0, 1).")
         if not np.isclose(train_size + test_size + val_size, 1.0):
             raise ValueError(
                 "train_size + test_size + val_size must equal 1.0; "

@@ -5,6 +5,7 @@ import pytest
 import numpy as np
 
 from src.data_preprocessing import DataSplitter
+from src.feature_extraction import FeatureSelector
 from src.models import create_model
 from src.train import model_hyperparameters, train_model
 
@@ -21,6 +22,13 @@ def test_split_data_rejects_invalid_total() -> None:
     y = pd.Series([0, 1] * 10)
     with pytest.raises(ValueError, match="must equal 1.0"):
         DataSplitter.split_data(X, y, train_size=0.8, test_size=0.3, val_size=0)
+
+
+def test_split_data_rejects_a_zero_sized_test_partition() -> None:
+    X = pd.DataFrame({"feature": range(20)})
+    y = pd.Series([0, 1] * 10)
+    with pytest.raises(ValueError, match="test_size"):
+        DataSplitter.split_data(X, y, train_size=0.8, test_size=0, val_size=0.2)
 
 
 def test_training_rejects_single_class_data() -> None:
@@ -53,3 +61,9 @@ def test_model_rejects_parameters_for_a_different_algorithm() -> None:
 def test_training_rejects_nonstandard_binary_label_encoding() -> None:
     with pytest.raises(ValueError, match=r"0 \(benign\) and 1 \(attack\)"):
         train_model(np.array([[0.0], [1.0]]), np.array([1, 2]))
+
+
+def test_mutual_information_feature_scores_return_one_score_per_feature() -> None:
+    X = pd.DataFrame({"first": [0.0, 0.1, 0.8, 0.9], "second": [1.0, 0.9, 0.2, 0.1]})
+    scores = FeatureSelector(method="mutual_info").get_feature_scores(X, pd.Series([0, 0, 1, 1]))
+    assert set(scores) == {"first", "second"}

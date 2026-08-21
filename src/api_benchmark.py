@@ -54,8 +54,8 @@ def benchmark_api(
     destination = Path(output_path)
     if destination.exists() and not overwrite:
         raise FileExistsError(f"Refusing to overwrite existing benchmark report: {destination}")
-    if requests_per_size < 1 or concurrency < 1 or max_records < 1:
-        raise ValueError("requests_per_size, concurrency, and max_records must be positive")
+    if requests_per_size < 1 or concurrency < 1 or max_records < 1 or timeout <= 0:
+        raise ValueError("requests_per_size, concurrency, max_records, and timeout must be positive")
     sizes = [int(size) for size in batch_sizes]
     if not sizes or any(size < 1 for size in sizes):
         raise ValueError("batch_sizes must contain positive integers")
@@ -63,6 +63,14 @@ def benchmark_api(
     base_url = api_url.rstrip("/")
     schema = request_json("GET", f"{base_url}/schema", None, api_key, timeout)
     health = request_json("GET", f"{base_url}/health", None, api_key, timeout)
+    schema_model_version = schema.get("model_version")
+    health_model_version = health.get("model_version")
+    if not isinstance(schema_model_version, str) or not schema_model_version:
+        raise RuntimeError("API /schema response did not contain a model_version")
+    if not isinstance(health_model_version, str) or not health_model_version:
+        raise RuntimeError("API /health response did not contain a model_version")
+    if schema_model_version != health_model_version:
+        raise RuntimeError("API model version changed between /schema and /health requests")
     required_features = schema.get("required_features")
     if not isinstance(required_features, list) or not all(isinstance(item, str) for item in required_features):
         raise RuntimeError("API /schema response did not contain required_features")
@@ -113,7 +121,7 @@ def benchmark_api(
     report = {
         "workflow": "api_latency_benchmark",
         "api_url": base_url,
-        "model_version": health.get("model_version"),
+        "model_version": health_model_version,
         "threshold": health.get("threshold"),
         "feature_count": health.get("feature_count"),
         "input_path": str(input_path),

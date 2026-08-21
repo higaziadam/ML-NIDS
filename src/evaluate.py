@@ -16,7 +16,6 @@ from sklearn.metrics import (
     confusion_matrix,
     classification_report,
     roc_curve,
-    auc,
     precision_recall_curve,
     average_precision_score,
 )
@@ -67,6 +66,35 @@ def select_binary_threshold(
     return float(selected["threshold"]), results
 
 
+def _binary_label_order(labels: np.ndarray, positive_class: Any | None) -> tuple[Any, Any]:
+    """Return explicit negative/positive labels for binary metrics."""
+    if len(labels) != 2:
+        raise ValueError("Binary metric calculation requires exactly two labels.")
+    positive = labels[-1] if positive_class is None else positive_class
+    if positive not in labels:
+        raise ValueError(f"Positive class {positive!r} is not present in observed labels {labels.tolist()}.")
+    negative = next(label for label in labels if label != positive)
+    return negative, positive
+
+
+def _positive_probability_vector(
+    probabilities: np.ndarray,
+    labels: np.ndarray,
+    positive_class: Any,
+    probability_classes: Optional[np.ndarray],
+) -> np.ndarray:
+    """Extract probabilities for an explicitly identified positive class."""
+    values = np.asarray(probabilities)
+    if values.ndim == 1:
+        return values.astype(float)
+    if values.ndim != 2:
+        raise ValueError("Probability output must be a 1D vector or 2D class-probability matrix.")
+    classes = np.asarray(probability_classes if probability_classes is not None else labels)
+    if values.shape[1] != len(classes) or positive_class not in classes:
+        raise ValueError("Probability columns do not match the supplied binary class order.")
+    return values[:, int(np.flatnonzero(classes == positive_class)[0])].astype(float)
+
+
 class ModelEvaluator:
     """Evaluate model performance."""
     
@@ -85,6 +113,8 @@ class ModelEvaluator:
         y_true: np.ndarray,
         y_pred: np.ndarray,
         y_pred_proba: Optional[np.ndarray] = None,
+        positive_class: Any | None = None,
+        probability_classes: Optional[np.ndarray] = None,
     ) -> Dict[str, Any]:
         """
         Comprehensive model evaluation.
@@ -93,6 +123,8 @@ class ModelEvaluator:
             y_true: True labels
             y_pred: Predicted labels (0/1)
             y_pred_proba: Predicted probabilities
+            positive_class: Label treated as the positive class for binary metrics
+            probability_classes: Class order corresponding to 2D probability columns
             
         Returns:
             Dictionary of metrics
@@ -105,9 +137,8 @@ class ModelEvaluator:
             average = "binary" if is_binary else "weighted"
             metric_kwargs: Dict[str, Any] = {"average": average, "zero_division": 0}
             if is_binary:
-                # scikit-learn defaults to ``pos_label=1``, which fails for
-                # legitimate string labels such as Benign/Attack.
-                metric_kwargs["pos_label"] = labels[-1]
+                negative_class, resolved_positive_class = _binary_label_order(labels, positive_class)
+                metric_kwargs["pos_label"] = resolved_positive_class
 
             # Classification metrics
             metrics["accuracy"] = accuracy_score(y_true, y_pred)
@@ -119,28 +150,40 @@ class ModelEvaluator:
             # ROC-AUC
             if y_pred_proba is not None:
                 try:
-                    if is_binary and len(y_pred_proba.shape) > 1:
-                        y_proba = y_pred_proba[:, 1]
-                    elif not is_binary and len(y_pred_proba.shape) > 1:
+                    if is_binary:
+                        y_proba = _positive_probability_vector(
+                            y_pred_proba,
+                            labels,
+                            resolved_positive_class,
+                            probability_classes,
+                        )
+                    elif np.asarray(y_pred_proba).ndim > 1:
+                        matrix = np.asarray(y_pred_proba)
+                        if probability_classes is not None:
+                            classes = np.asarray(probability_classes)
+                            if set(classes.tolist()) != set(labels.tolist()):
+                                raise ValueError("Probability columns do not match observed multiclass labels.")
+                            matrix = matrix[:, [int(np.flatnonzero(classes == label)[0]) for label in labels]]
                         metrics["roc_auc"] = roc_auc_score(
-                            y_true, y_pred_proba, labels=labels, multi_class="ovr", average="weighted"
+                            y_true, matrix, labels=labels, multi_class="ovr", average="weighted"
                         )
                         y_true_binarized = label_binarize(y_true, classes=labels)
                         metrics["pr_auc"] = average_precision_score(
-                            y_true_binarized, y_pred_proba, average="weighted"
+                            y_true_binarized, matrix, average="weighted"
                         )
                         y_proba = None
                     else:
                         y_proba = y_pred_proba
                     if y_proba is not None:
-                        y_true_binary = (np.asarray(y_true) == labels[-1]).astype(int)
+                        y_true_binary = (np.asarray(y_true) == resolved_positive_class).astype(int)
                         metrics["roc_auc"] = roc_auc_score(y_true_binary, y_proba)
                         metrics["pr_auc"] = average_precision_score(y_true_binary, y_proba)
                 except Exception as e:
                     logger.warning(f"Could not compute AUC: {e}")
             
             # Confusion matrix
-            cm = confusion_matrix(y_true, y_pred, labels=labels)
+            cm_labels = [negative_class, resolved_positive_class] if is_binary else labels
+            cm = confusion_matrix(y_true, y_pred, labels=cm_labels)
             metrics["confusion_matrix"] = cm.tolist()
             if is_binary:
                 tn, fp, fn, tp = cm.ravel()
@@ -296,6 +339,8 @@ def comprehensive_evaluation(
     y_pred: np.ndarray,
     y_pred_proba: Optional[np.ndarray] = None,
     selected_threshold: Optional[float] = None,
+    positive_class: Any | None = None,
+    probability_classes: Optional[np.ndarray] = None,
     save_results: bool = False,
     results_path: Optional[Path] = None,
 ) -> Dict[str, any]:
@@ -307,6 +352,8 @@ def comprehensive_evaluation(
         y_pred: Predicted labels
         y_pred_proba: Predicted probabilities
         selected_threshold: Decision threshold selected on validation data
+        positive_class: Label treated as positive for binary metrics
+        probability_classes: Class order corresponding to 2D probability columns
         save_results: Save results to file
         results_path: Path to save results
         
@@ -318,7 +365,13 @@ def comprehensive_evaluation(
         
         # Evaluator
         evaluator = ModelEvaluator()
-        results["metrics"] = evaluator.evaluate(y_true, y_pred, y_pred_proba)
+        results["metrics"] = evaluator.evaluate(
+            y_true,
+            y_pred,
+            y_pred_proba,
+            positive_class=positive_class,
+            probability_classes=probability_classes,
+        )
         if selected_threshold is not None:
             evaluator.results["selected_threshold"] = selected_threshold
             results["metrics"]["selected_threshold"] = selected_threshold
@@ -326,7 +379,12 @@ def comprehensive_evaluation(
         
         # Confusion matrix
         labels = np.unique(np.concatenate([np.asarray(y_true), np.asarray(y_pred)]))
-        cm = confusion_matrix(y_true, y_pred, labels=labels)
+        if len(labels) == 2:
+            negative_class, resolved_positive_class = _binary_label_order(labels, positive_class)
+            cm_labels = [negative_class, resolved_positive_class]
+        else:
+            cm_labels = labels
+        cm = confusion_matrix(y_true, y_pred, labels=cm_labels)
         ConfusionMatrixAnalyzer.print_confusion_matrix(y_true, y_pred)
         results["confusion_matrix"] = cm.tolist()
         
@@ -338,14 +396,20 @@ def comprehensive_evaluation(
         
         # ROC curve
         if y_pred_proba is not None and len(labels) == 2:
-            if len(y_pred_proba.shape) > 1 and y_pred_proba.shape[1] >= 2:
-                y_proba = y_pred_proba[:, 1]
-            else:
-                logger.warning("Skipping ROC/PR curves: model returned fewer than two probability columns.")
+            _, resolved_positive_class = _binary_label_order(labels, positive_class)
+            try:
+                y_proba = _positive_probability_vector(
+                    y_pred_proba,
+                    labels,
+                    resolved_positive_class,
+                    probability_classes,
+                )
+            except ValueError as exc:
+                logger.warning("Skipping ROC/PR curves: %s", exc)
                 y_proba = None
 
             if y_proba is not None:
-                y_true_binary = (np.asarray(y_true) == labels[-1]).astype(int)
+                y_true_binary = (np.asarray(y_true) == resolved_positive_class).astype(int)
                 fpr, tpr, thresholds = ROCAnalyzer.compute_roc_curve(y_true_binary, y_proba)
                 results["roc_curve"] = {"fpr": fpr.tolist(), "tpr": tpr.tolist()}
                 
@@ -363,7 +427,7 @@ def comprehensive_evaluation(
             save_data(metrics_df, results_path / "metrics.csv")
             
             # Save confusion matrix
-            cm_df = pd.DataFrame(cm, index=labels, columns=labels)
+            cm_df = pd.DataFrame(cm, index=cm_labels, columns=cm_labels)
             save_data(cm_df, results_path / "confusion_matrix.csv")
             
             logger.info(f"Results saved to {results_path}")

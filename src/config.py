@@ -5,7 +5,6 @@ This module contains all configuration settings including paths, hyperparameters
 model configurations, and logging settings.
 """
 
-import os
 from pathlib import Path
 
 # Project root directory
@@ -20,11 +19,10 @@ PROCESSED_DATA_DIR = DATA_DIR / "processed"
 SPLITS_DIR = DATA_DIR / "splits"
 FINAL_HOLDOUT_DIR = DATA_DIR / "final_holdout"
 
-# Create directories if they don't exist
-RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
-PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
-SPLITS_DIR.mkdir(parents=True, exist_ok=True)
-FINAL_HOLDOUT_DIR.mkdir(parents=True, exist_ok=True)
+# Do not create directories during import. Inference containers intentionally
+# mount model data read-only, and configuration must remain safe to import in
+# those deployments. Write-oriented operations create their own destination
+# directories immediately before saving output.
 
 # ============================================================================
 # MODEL PATHS
@@ -34,15 +32,10 @@ SAVED_MODELS_DIR = MODELS_DIR / "saved"
 MODEL_CONFIGS_DIR = MODELS_DIR / "configs"
 EVALUATION_DIR = MODELS_DIR / "evaluation"
 
-SAVED_MODELS_DIR.mkdir(parents=True, exist_ok=True)
-MODEL_CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
-EVALUATION_DIR.mkdir(parents=True, exist_ok=True)
-
 # ============================================================================
 # LOGGING PATHS
 # ============================================================================
 LOGS_DIR = PROJECT_ROOT / "logs"
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ============================================================================
 # DATA CONFIGURATION

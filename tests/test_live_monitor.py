@@ -3,6 +3,7 @@
 import json
 
 import pandas as pd
+import pytest
 
 from src.live_monitor import FlowDirectoryMonitor
 
@@ -94,3 +95,26 @@ def test_quarantines_source_when_scoring_succeeds_but_archiving_fails(tmp_path, 
     assert results[0]["status"] == "scored_archive_failed"
     assert (tmp_path / "alerts" / "scored_scored.csv").is_file()
     assert (tmp_path / "failed" / "scored.csv").is_file()
+
+
+def test_ignores_file_that_disappears_between_scan_and_stat(tmp_path) -> None:
+    monitor = FlowDirectoryMonitor(
+        tmp_path / "incoming",
+        tmp_path / "alerts",
+        tmp_path / "processed",
+        tmp_path / "failed",
+        score_function=lambda *args, **kwargs: {},
+    )
+
+    assert monitor._is_stable(tmp_path / "incoming" / "removed.csv") is False
+
+
+def test_rejects_invalid_request_settings(tmp_path) -> None:
+    with pytest.raises(ValueError, match="batch_size"):
+        FlowDirectoryMonitor(
+            tmp_path / "incoming",
+            tmp_path / "alerts",
+            tmp_path / "processed",
+            tmp_path / "failed",
+            batch_size=0,
+        )

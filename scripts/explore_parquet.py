@@ -7,7 +7,7 @@ Reads and explores CICIDS2018 parquet files from Kaggle with beautiful formattin
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict
 import sys
 
 # Support the documented invocation: ``python scripts/explore_parquet.py``.
@@ -259,7 +259,7 @@ def main():
     explorer.print_file_list()
     
     # Explore all files with summary
-    all_data = explorer.explore_all_files()
+    explorer.explore_all_files()
     
     # Show detailed view of first file
     print("\n" + "▶"*35)

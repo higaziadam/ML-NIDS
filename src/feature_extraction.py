@@ -178,8 +178,10 @@ class FeatureSelector:
         """Get feature importance scores."""
         score_func = f_classif if self.method == "f_classif" else mutual_info_classif
         scores = score_func(X, y)
-        
-        return dict(zip(X.columns, scores[0]))
+        # f_classif returns (scores, p_values), whereas mutual_info_classif
+        # returns the score array directly.
+        values = scores[0] if isinstance(scores, tuple) else scores
+        return dict(zip(X.columns, values))
 
 
 class FeatureAnalyzer:

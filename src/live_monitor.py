@@ -52,6 +52,8 @@ class FlowDirectoryMonitor:
     ) -> None:
         if stable_checks < 2:
             raise ValueError("stable_checks must be at least 2 to avoid reading an actively written file")
+        if batch_size < 1 or timeout <= 0:
+            raise ValueError("batch_size and timeout must be positive")
         self.input_dir = Path(input_dir)
         self.alerts_dir = Path(alerts_dir)
         self.processed_dir = Path(processed_dir)
@@ -67,7 +69,14 @@ class FlowDirectoryMonitor:
             directory.mkdir(parents=True, exist_ok=True)
 
     def _is_stable(self, path: Path) -> bool:
-        stat = path.stat()
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            # A producer may atomically rename or remove an export between the
+            # directory scan and this check. Leave it for a later scan instead
+            # of terminating the long-running watcher.
+            self._observations.pop(path, None)
+            return False
         current = (stat.st_size, stat.st_mtime_ns)
         previous = self._observations.get(path)
         if previous is None or previous[:2] != current:

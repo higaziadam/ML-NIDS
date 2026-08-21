@@ -11,9 +11,23 @@ def test_evaluator_accepts_string_binary_labels() -> None:
         np.array(["Benign", "Attack", "Attack", "Benign"]),
         np.array(["Benign", "Attack", "Benign", "Benign"]),
         np.array([[0.9, 0.1], [0.1, 0.9], [0.6, 0.4], [0.8, 0.2]]),
+        positive_class="Attack",
+        probability_classes=np.array(["Benign", "Attack"]),
     )
     assert results["labels"] == ["Attack", "Benign"]
     assert "f1" in results
+    assert results["roc_auc"] == 1.0
+
+
+def test_evaluator_uses_supplied_probability_class_order() -> None:
+    results = ModelEvaluator().evaluate(
+        np.array([0, 1, 1, 0]),
+        np.array([0, 1, 0, 0]),
+        np.array([[0.1, 0.9], [0.9, 0.1], [0.4, 0.6], [0.2, 0.8]]),
+        positive_class=1,
+        probability_classes=np.array([1, 0]),
+    )
+    assert results["roc_auc"] == 1.0
 
 
 def test_evaluator_accepts_multiclass_labels() -> None:

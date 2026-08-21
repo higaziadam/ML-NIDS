@@ -7,7 +7,7 @@ Converts parquet files to training-ready format with proper preprocessing.
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import Tuple, Dict
+from typing import Tuple
 import argparse
 import sys
 

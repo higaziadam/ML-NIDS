@@ -23,3 +23,11 @@ def test_quality_gate_rejects_policy_metric_regression() -> None:
 
     with pytest.raises(QualityGateError, match="test recall"):
         evaluate_release_profile(profile)
+
+
+def test_quality_gate_rejects_a_non_hexadecimal_artifact_hash() -> None:
+    profile = copy.deepcopy(load_release_profile("models/configs/xgb_v10_candidate.json"))
+    profile["artifacts"]["model_sha256"] = "z" * 64
+
+    with pytest.raises(QualityGateError, match="hexadecimal"):
+        evaluate_release_profile(profile)

@@ -356,9 +356,9 @@ def main():
         json.dump(notebook, f, indent=2)
     
     print(f"✓ Created Jupyter notebook: {output_path}")
-    print(f"\nTo use it:")
-    print(f"  1. Install jupyter: pip install jupyter")
-    print(f"  2. Run: jupyter notebook notebooks/EDA_CICIDS2018.ipynb")
+    print("\nTo use it:")
+    print("  1. Install jupyter: pip install jupyter")
+    print("  2. Run: jupyter notebook notebooks/EDA_CICIDS2018.ipynb")
 
 
 if __name__ == "__main__":

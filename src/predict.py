@@ -117,7 +117,7 @@ def make_predictions(
         y_pred = np.where(attack_probabilities >= threshold, 1, 0)
         y_proba = attack_probabilities if return_probabilities else None
     
-    logger.info(f"Predictions complete")
+    logger.info("Predictions complete")
     
     return y_pred, y_proba
 
@@ -249,7 +249,7 @@ def batch_predict(
         
         results.append(result)
     
-    logger.info(f"Batch prediction complete")
+    logger.info("Batch prediction complete")
     
     return results
 

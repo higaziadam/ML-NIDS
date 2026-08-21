@@ -64,8 +64,12 @@ def evaluate_release_profile(profile: Mapping[str, Any]) -> dict[str, Any]:
 
     artifacts = profile.get("artifacts")
     model_hash = artifacts.get("model_sha256") if isinstance(artifacts, Mapping) else None
-    if not isinstance(model_hash, str) or len(model_hash) != 64:
-        failures.append("release metadata does not contain a 64-character model SHA-256")
+    if (
+        not isinstance(model_hash, str)
+        or len(model_hash) != 64
+        or any(character not in "0123456789abcdefABCDEF" for character in model_hash)
+    ):
+        failures.append("release metadata does not contain a valid 64-character hexadecimal model SHA-256")
     if failures:
         raise QualityGateError("Release quality gate failed: " + "; ".join(failures))
 

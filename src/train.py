@@ -19,7 +19,7 @@ import pandas as pd
 
 from src.config import CONFIG, SAVED_MODELS_DIR, SPLITS_DIR
 from src.utils import logger, save_model, load_data, save_data, Timer, setup_logger
-from src.data_preprocessing import DataCleaner, DataPreprocessor, preprocess_pipeline, DataSplitter
+from src.data_preprocessing import DataPreprocessor, preprocess_pipeline, DataSplitter
 from src.feature_extraction import feature_engineering_pipeline
 from src.models import create_model, ModelFactory
 from src.evaluate import comprehensive_evaluation, select_binary_threshold
@@ -293,7 +293,7 @@ def train_model(
         model = create_model(model_type, **model_kwargs)
         model.fit(X_train, y_train)
     
-    logger.info(f"Model training complete")
+    logger.info("Model training complete")
     
     return model
 
@@ -332,6 +332,8 @@ def evaluate_model(
     logger.info(f"Evaluating {model_name}")
     
     y_pred_proba = model.predict_proba(X_test)
+    estimator = getattr(model, "model", model)
+    probability_classes = np.asarray(getattr(estimator, "classes_", []))
     if threshold is None:
         y_pred = model.predict(X_test)
     else:
@@ -347,6 +349,8 @@ def evaluate_model(
         y_pred,
         y_pred_proba,
         selected_threshold=threshold,
+        positive_class=1,
+        probability_classes=probability_classes,
         save_results=save_results,
         results_path=SAVED_MODELS_DIR / f"{model_name}_results",
     )

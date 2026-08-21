@@ -4,7 +4,6 @@ Model definitions for ML-NIDS including Random Forest, XGBoost, and SVM.
 
 from typing import Optional
 import numpy as np
-from pathlib import Path
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC

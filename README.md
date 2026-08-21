@@ -362,7 +362,7 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m pytest -q --basetemp temp\pytest
 ```
 
-The current suite contains 37 tests covering preprocessing, evaluation,
+The current suite contains 46 fast unit tests covering preprocessing, evaluation,
 release-profile validation, holdout/cross-validation safeguards, external-data
 schema preparation, batch prediction, flow ingestion, live-file handling, API
 latency reporting, and API behavior/protections.
@@ -380,8 +380,11 @@ validation/test recall and false-positive rate, and artifact hash metadata. It
 does not retrain or reevaluate the ignored full dataset in CI.
 
 GitHub Actions runs the test suite, V10 quality gate, dependency audit,
-Dockerfile linting, and high/critical vulnerability scans for both Docker
-images. Pull requests also receive a dependency-change review.
+Dockerfile linting, a Docker Compose API end-to-end test, and high/critical
+vulnerability scans for both Docker images. The end-to-end test generates a
+small synthetic artifact, starts the API container, and verifies `/health`,
+`/schema`, and `/predict` through HTTP. Pull requests also receive a
+dependency-change review.
 
 ## 11. Deployment
 

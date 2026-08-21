@@ -1,6 +1,5 @@
 """Tests for immutable release-profile handling and artifact protection."""
 
-import copy
 import json
 
 import pytest
