@@ -17,7 +17,13 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y util-linux \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements-runtime.txt
+    && pip install --no-cache-dir -r requirements-runtime.txt \
+    # Package installation is a build-time concern. Removing pip from the
+    # deployed image eliminates its unused vendored dependencies and reduces
+    # the runtime attack surface.
+    && rm -rf /usr/local/lib/python3.14/site-packages/pip \
+        /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
+        /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14
 
 COPY src ./src
 
