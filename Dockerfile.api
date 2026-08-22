@@ -10,6 +10,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements-runtime.txt ./
+# Resolve the current Debian security release at build time; pinning this
+# package would prevent timely security updates to the inherited base image.
+# hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get install --no-install-recommends -y util-linux \
     && rm -rf /var/lib/apt/lists/* \
