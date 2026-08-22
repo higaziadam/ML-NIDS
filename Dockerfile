@@ -10,7 +10,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements-runtime.txt ./
-RUN pip install --no-cache-dir --upgrade pip \
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y util-linux \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements-runtime.txt
 
 COPY src ./src

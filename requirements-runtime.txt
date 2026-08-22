@@ -11,3 +11,8 @@ xgboost==3.4.0
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30,<1.0
 prometheus-client>=0.22,<1.0
+
+# Security baselines for packages inherited from the Python base image or
+# installed transitively by the runtime dependencies.
+setuptools>=78.1.1
+msgpack>=1.2.1
