@@ -8,7 +8,8 @@ preprocessing, feature engineering, model training, and evaluation.
 import argparse
 import importlib.metadata
 import json
-import subprocess
+import shutil
+import subprocess  # nosec B404
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -363,9 +364,13 @@ def evaluate_model(
 
 def _git_commit_sha() -> Optional[str]:
     """Return the current Git commit when the source is inside a repository."""
+    git_executable = shutil.which("git")
+    if git_executable is None:
+        return None
     try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL
+        # This uses the resolved Git executable and fixed metadata arguments.
+        return subprocess.check_output(  # nosec B603
+            [git_executable, "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL
         ).strip()
     except (OSError, subprocess.CalledProcessError):
         return None

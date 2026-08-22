@@ -49,3 +49,8 @@ def test_benchmark_rejects_a_changing_api_model_version(tmp_path) -> None:
 def test_benchmark_rejects_a_nonpositive_timeout(tmp_path) -> None:
     with pytest.raises(ValueError, match="timeout"):
         benchmark_api(tmp_path / "flows.csv", tmp_path / "benchmark.json", timeout=0)
+
+
+def test_benchmark_rejects_non_http_api_urls(tmp_path) -> None:
+    with pytest.raises(ValueError, match="http"):
+        benchmark_api(tmp_path / "flows.csv", tmp_path / "benchmark.json", api_url="file:///tmp")

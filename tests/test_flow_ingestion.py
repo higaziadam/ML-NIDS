@@ -1,8 +1,9 @@
 """Tests for the CICFlowMeter CSV-to-API adapter."""
 
 import pandas as pd
+import pytest
 
-from src.flow_ingestion import score_cicflowmeter_csv
+from src.flow_ingestion import request_api_json, score_cicflowmeter_csv
 
 
 def test_scores_normalized_cicflowmeter_records_and_retains_invalid_rows(tmp_path) -> None:
@@ -62,3 +63,37 @@ def test_refuses_to_replace_an_existing_score_output(tmp_path) -> None:
         assert "Refusing to overwrite" in str(exc)
     else:
         raise AssertionError("Expected existing output to be protected")
+
+
+def test_failed_scoring_preserves_existing_output_and_cleans_staging_files(tmp_path) -> None:
+    source = tmp_path / "flows.csv"
+    pd.DataFrame({"feature": [1.0, 2.0]}).to_csv(source, index=False)
+    output = tmp_path / "scores.csv"
+    output.write_text("previous complete result\n", encoding="utf-8")
+    calls = 0
+
+    def failing_api(method: str, url: str, payload: dict | None, api_key: str | None, timeout: float) -> dict:
+        nonlocal calls
+        if url.endswith("/schema"):
+            return {"model_version": "test_model", "required_features": ["feature"]}
+        if url.endswith("/health"):
+            return {"status": "ok", "model_version": "test_model", "feature_count": 1, "threshold": 0.5}
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("simulated API failure")
+        return {"model_version": "test_model", "threshold": 0.5, "predictions": [{"prediction": 0, "probability": 0.1}]}
+
+    try:
+        score_cicflowmeter_csv(source, output, chunksize=1, overwrite=True, request_json=failing_api)
+    except RuntimeError as exc:
+        assert "simulated API failure" in str(exc)
+    else:
+        raise AssertionError("Expected scoring failure")
+
+    assert output.read_text(encoding="utf-8") == "previous complete result\n"
+    assert not list(tmp_path.glob(".scores.csv.*.partial"))
+
+
+def test_rejects_non_http_api_urls_without_opening_them() -> None:
+    with pytest.raises(ValueError, match="http"):
+        request_api_json("GET", "file:///sensitive-data.csv")

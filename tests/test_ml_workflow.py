@@ -42,6 +42,16 @@ def test_manifest_calibration_and_drift_reports(tmp_path) -> None:
     assert report["summary"]["requires_review"] is True
 
 
+def test_drift_report_counts_values_outside_baseline_edges() -> None:
+    baseline = build_drift_baseline(pd.DataFrame({"feature": [0.0, 0.1, 0.2, 0.3]}), ["feature"])
+    report = drift_report(pd.DataFrame({"feature": [9.0, 9.1, 9.2, 9.3]}), baseline, psi_alert=0.01)
+
+    result = report["features"]["feature"]
+    assert result["finite_rows"] == 4
+    assert result["drift_detected"] is True
+    assert result["psi"] > 0.01
+
+
 def test_representative_evaluation_and_permutation_explainability(tmp_path) -> None:
     model_path, data = _artifact(tmp_path)
     source = tmp_path / "representative.csv"

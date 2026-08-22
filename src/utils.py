@@ -5,7 +5,7 @@ Utility functions for ML-NIDS including logging, metrics, and data loading.
 import logging
 from logging.handlers import RotatingFileHandler
 import json
-import pickle
+import pickle  # nosec B403
 from pathlib import Path
 from typing import Any, Dict, Tuple, Optional, Union
 
@@ -104,8 +104,11 @@ def save_model(model: Any, filepath: Union[str, Path]) -> None:
 
 
 def load_model(filepath: Union[str, Path]) -> Any:
-    """
-    Load model from pickle file.
+    """Load a model artifact from a trusted local path.
+
+    Pickle is required for the scikit-learn/XGBoost artifact format used by
+    this project, but it can execute code during deserialization. Never load
+    model files received from untrusted users or locations that they can write.
     
     Args:
         filepath: Path to the saved model
@@ -119,7 +122,8 @@ def load_model(filepath: Union[str, Path]) -> Any:
         raise FileNotFoundError(f"Model file not found: {filepath}")
     
     with open(filepath, "rb") as f:
-        model = pickle.load(f)
+        # The function's contract restricts artifacts to trusted deployment paths.
+        model = pickle.load(f)  # nosec B301
     
     logger.info(f"Model loaded from {filepath}")
     return model

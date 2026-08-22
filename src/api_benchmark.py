@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from src.external_validation import normalized_columns
-from src.flow_ingestion import ApiRequest, request_api_json
+from src.flow_ingestion import ApiRequest, normalize_api_base_url, request_api_json
 
 
 def _load_records(input_path: str | Path, required_features: list[str], max_records: int) -> list[dict[str, float]]:
@@ -60,7 +60,7 @@ def benchmark_api(
     if not sizes or any(size < 1 for size in sizes):
         raise ValueError("batch_sizes must contain positive integers")
 
-    base_url = api_url.rstrip("/")
+    base_url = normalize_api_base_url(api_url)
     schema = request_json("GET", f"{base_url}/schema", None, api_key, timeout)
     health = request_json("GET", f"{base_url}/health", None, api_key, timeout)
     schema_model_version = schema.get("model_version")

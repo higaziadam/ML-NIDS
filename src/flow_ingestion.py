@@ -12,7 +12,9 @@ import os
 from pathlib import Path
 from typing import Callable
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -23,6 +25,18 @@ from src.external_validation import normalized_columns
 ApiRequest = Callable[[str, str, dict | None, str | None, float], dict]
 
 
+def normalize_api_base_url(api_url: str) -> str:
+    """Accept only a normal HTTP(S) base URL for the inference service."""
+    parsed = urlsplit(api_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("api_url must be an absolute http:// or https:// URL.")
+    if parsed.username or parsed.password:
+        raise ValueError("api_url must not embed credentials; use --api-key instead.")
+    if parsed.query or parsed.fragment:
+        raise ValueError("api_url must not contain a query string or fragment.")
+    return api_url.rstrip("/")
+
+
 def request_api_json(
     method: str,
     url: str,
@@ -31,6 +45,13 @@ def request_api_json(
     timeout: float = 30.0,
 ) -> dict:
     """Send a JSON request to the inference API without logging flow contents."""
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("API requests must use an absolute http:// or https:// URL.")
+    if parsed.username or parsed.password:
+        raise ValueError("API URLs must not embed credentials; use an API-key header instead.")
+    if timeout <= 0:
+        raise ValueError("timeout must be positive")
     headers = {"Accept": "application/json"}
     body = None
     if payload is not None:
@@ -40,7 +61,8 @@ def request_api_json(
         headers["X-API-Key"] = api_key
     request = Request(url, data=body, headers=headers, method=method)
     try:
-        with urlopen(request, timeout=timeout) as response:
+        # The preceding checks restrict this call to credential-free HTTP(S).
+        with urlopen(request, timeout=timeout) as response:  # nosec B310
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
@@ -107,96 +129,102 @@ def score_cicflowmeter_csv(
     if not source.is_file():
         raise FileNotFoundError(f"Input CSV not found: {source}")
     manifest_path = destination.with_suffix(".manifest.json")
-    if destination.exists():
-        if not overwrite:
-            raise FileExistsError(f"Refusing to overwrite existing output: {destination}")
-        destination.unlink()
-        if manifest_path.exists():
-            manifest_path.unlink()
-    if batch_size < 1 or chunksize < 1:
-        raise ValueError("batch_size and chunksize must be positive integers")
+    if destination.exists() and not overwrite:
+        raise FileExistsError(f"Refusing to overwrite existing output: {destination}")
+    if batch_size < 1 or chunksize < 1 or timeout <= 0:
+        raise ValueError("batch_size, chunksize, and timeout must be positive")
     destination.parent.mkdir(parents=True, exist_ok=True)
+    staging_path = destination.with_name(f".{destination.name}.{uuid4().hex}.partial")
+    manifest_staging_path = manifest_path.with_name(
+        f".{manifest_path.name}.{uuid4().hex}.partial"
+    )
 
-    base_url = api_url.rstrip("/")
-    schema = request_json("GET", f"{base_url}/schema", None, api_key, timeout)
-    required_features = schema.get("required_features")
-    if not isinstance(required_features, list) or not all(isinstance(item, str) for item in required_features):
-        raise RuntimeError("API /schema response did not contain required_features")
-    if not required_features:
-        raise RuntimeError("API /schema response contains no required features")
-    health = request_json("GET", f"{base_url}/health", None, api_key, timeout)
-    model_version = health.get("model_version")
-    threshold = health.get("threshold")
-    if not isinstance(model_version, str) or not model_version:
-        raise RuntimeError("API /health response did not contain a model_version")
-    if not isinstance(threshold, (int, float)):
-        raise RuntimeError("API /health response did not contain a numeric threshold")
-    threshold = float(threshold)
+    try:
+        base_url = normalize_api_base_url(api_url)
+        schema = request_json("GET", f"{base_url}/schema", None, api_key, timeout)
+        required_features = schema.get("required_features")
+        if not isinstance(required_features, list) or not all(isinstance(item, str) for item in required_features):
+            raise RuntimeError("API /schema response did not contain required_features")
+        if not required_features:
+            raise RuntimeError("API /schema response contains no required features")
+        health = request_json("GET", f"{base_url}/health", None, api_key, timeout)
+        model_version = health.get("model_version")
+        threshold = health.get("threshold")
+        if not isinstance(model_version, str) or not model_version:
+            raise RuntimeError("API /health response did not contain a model_version")
+        if not isinstance(threshold, (int, float)):
+            raise RuntimeError("API /health response did not contain a numeric threshold")
+        threshold = float(threshold)
 
-    rows_read = 0
-    rows_scored = 0
-    rows_invalid = 0
-    alerts = 0
-    wrote_header = False
+        rows_read = 0
+        rows_scored = 0
+        rows_invalid = 0
+        alerts = 0
+        wrote_header = False
 
-    for chunk in pd.read_csv(source, chunksize=chunksize, low_memory=False):
-        source_rows = np.arange(rows_read, rows_read + len(chunk), dtype=int)
-        rows_read += len(chunk)
-        valid, invalid = _normalize_and_validate_chunk(chunk, required_features, source_rows)
-        result_frames = [invalid]
+        for chunk in pd.read_csv(source, chunksize=chunksize, low_memory=False):
+            source_rows = np.arange(rows_read, rows_read + len(chunk), dtype=int)
+            rows_read += len(chunk)
+            valid, invalid = _normalize_and_validate_chunk(chunk, required_features, source_rows)
+            result_frames = [invalid]
 
-        for start in range(0, len(valid), batch_size):
-            batch = valid.iloc[start : start + batch_size]
-            records = batch.loc[:, required_features].to_dict(orient="records")
-            response = request_json("POST", f"{base_url}/predict", {"records": records}, api_key, timeout)
-            predictions = response.get("predictions")
-            if not isinstance(predictions, list) or len(predictions) != len(batch):
-                raise RuntimeError("API /predict response count did not match the submitted batch")
-            response_threshold = response.get("threshold")
-            if not isinstance(response_threshold, (int, float)):
-                raise RuntimeError("API /predict response did not contain a numeric threshold")
-            response_model_version = response.get("model_version")
-            if response_model_version != model_version or float(response_threshold) != threshold:
-                raise RuntimeError("API model version or threshold changed during ingestion; refusing mixed output")
-            scores = pd.DataFrame(predictions)
-            if not {"prediction", "probability"}.issubset(scores.columns):
-                raise RuntimeError("API /predict response did not contain prediction and probability")
-            scores.insert(0, "source_row", batch["source_row"].to_numpy())
-            scores["prediction"] = scores["prediction"].astype(int)
-            scores["probability"] = scores["probability"].astype(float)
-            scores["is_alert"] = scores["prediction"].eq(1)
-            scores["score_status"] = "scored"
-            result_frames.append(scores.loc[:, ["source_row", "prediction", "probability", "is_alert", "score_status"]])
-            rows_scored += len(scores)
-            alerts += int(scores["is_alert"].sum())
+            for start in range(0, len(valid), batch_size):
+                batch = valid.iloc[start : start + batch_size]
+                records = batch.loc[:, required_features].to_dict(orient="records")
+                response = request_json("POST", f"{base_url}/predict", {"records": records}, api_key, timeout)
+                predictions = response.get("predictions")
+                if not isinstance(predictions, list) or len(predictions) != len(batch):
+                    raise RuntimeError("API /predict response count did not match the submitted batch")
+                response_threshold = response.get("threshold")
+                if not isinstance(response_threshold, (int, float)):
+                    raise RuntimeError("API /predict response did not contain a numeric threshold")
+                response_model_version = response.get("model_version")
+                if response_model_version != model_version or float(response_threshold) != threshold:
+                    raise RuntimeError("API model version or threshold changed during ingestion; refusing mixed output")
+                scores = pd.DataFrame(predictions)
+                if not {"prediction", "probability"}.issubset(scores.columns):
+                    raise RuntimeError("API /predict response did not contain prediction and probability")
+                scores.insert(0, "source_row", batch["source_row"].to_numpy())
+                scores["prediction"] = scores["prediction"].astype(int)
+                scores["probability"] = scores["probability"].astype(float)
+                scores["is_alert"] = scores["prediction"].eq(1)
+                scores["score_status"] = "scored"
+                result_frames.append(scores.loc[:, ["source_row", "prediction", "probability", "is_alert", "score_status"]])
+                rows_scored += len(scores)
+                alerts += int(scores["is_alert"].sum())
 
-        results = pd.concat(result_frames, ignore_index=True).sort_values("source_row")
-        results.insert(1, "model_version", model_version)
-        results.insert(2, "threshold", threshold)
-        results.to_csv(destination, mode="a", index=False, header=not wrote_header)
-        wrote_header = True
-        rows_invalid += len(invalid)
+            results = pd.concat(result_frames, ignore_index=True).sort_values("source_row")
+            results.insert(1, "model_version", model_version)
+            results.insert(2, "threshold", threshold)
+            results.to_csv(staging_path, mode="a", index=False, header=not wrote_header)
+            wrote_header = True
+            rows_invalid += len(invalid)
 
-    if not wrote_header:
-        raise ValueError("Input CSV contained no flow records")
-    manifest = {
-        "workflow": "cicflowmeter_csv_to_api",
-        "input_path": str(source),
-        "output_path": str(destination),
-        "api_url": base_url,
-        "model_version": model_version,
-        "threshold": threshold,
-        "required_features": required_features,
-        "rows_read": rows_read,
-        "rows_scored": rows_scored,
-        "rows_invalid_input": rows_invalid,
-        "alerts": alerts,
-        "warning": "Scores are flow-level predictions. This adapter does not capture packets or create network flows.",
-    }
-    with manifest_path.open("w", encoding="utf-8") as handle:
-        json.dump(manifest, handle, indent=2)
-        handle.write("\n")
-    return manifest
+        if not wrote_header:
+            raise ValueError("Input CSV contained no flow records")
+        manifest = {
+            "workflow": "cicflowmeter_csv_to_api",
+            "input_path": str(source),
+            "output_path": str(destination),
+            "api_url": base_url,
+            "model_version": model_version,
+            "threshold": threshold,
+            "required_features": required_features,
+            "rows_read": rows_read,
+            "rows_scored": rows_scored,
+            "rows_invalid_input": rows_invalid,
+            "alerts": alerts,
+            "warning": "Scores are flow-level predictions. This adapter does not capture packets or create network flows.",
+        }
+        with manifest_staging_path.open("w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, indent=2)
+            handle.write("\n")
+        staging_path.replace(destination)
+        manifest_staging_path.replace(manifest_path)
+        return manifest
+    finally:
+        staging_path.unlink(missing_ok=True)
+        manifest_staging_path.unlink(missing_ok=True)
 
 
 def main() -> None:

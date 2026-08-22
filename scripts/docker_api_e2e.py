@@ -12,13 +12,13 @@ import os
 from pathlib import Path
 import shutil
 import socket
-import subprocess
+import subprocess  # nosec B404
 import sys
 import time
 from typing import Any
 from http.client import RemoteDisconnected
 from urllib.error import URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 import pandas as pd
@@ -65,6 +65,9 @@ def _write_smoke_artifact(destination: Path) -> None:
 
 
 def _request_json(url: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    parsed = urlsplit(url)
+    if parsed.scheme != "http" or parsed.hostname != "127.0.0.1":
+        raise ValueError("Docker E2E requests must target the local HTTP service.")
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     request = Request(
         url,
@@ -72,7 +75,8 @@ def _request_json(url: str, payload: dict[str, Any] | None = None) -> dict[str, 
         headers={"Content-Type": "application/json"} if data is not None else {},
         method="POST" if data is not None else "GET",
     )
-    with urlopen(request, timeout=5) as response:
+    # The target is restricted to the local disposable Compose test service.
+    with urlopen(request, timeout=5) as response:  # nosec B310
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -138,7 +142,8 @@ def main() -> None:
     failure: BaseException | None = None
     try:
         _write_smoke_artifact(MODEL_PATH)
-        subprocess.run(
+        # This command is assembled only from fixed Compose arguments and a PID-based project name.
+        subprocess.run(  # nosec B603
             [*command, "up", "--build", "--detach", "nids-api", "prometheus"],
             cwd=PROJECT_ROOT,
             env=environment,
@@ -172,8 +177,9 @@ def main() -> None:
         raise
     finally:
         if failure is not None:
-            subprocess.run([*command, "logs", "--no-color"], cwd=PROJECT_ROOT, env=environment, check=False)
-        subprocess.run(
+            subprocess.run([*command, "logs", "--no-color"], cwd=PROJECT_ROOT, env=environment, check=False)  # nosec B603
+        # This cleanup command also uses only the fixed Compose argument list.
+        subprocess.run(  # nosec B603
             [*command, "down", "--volumes", "--remove-orphans"],
             cwd=PROJECT_ROOT,
             env=environment,

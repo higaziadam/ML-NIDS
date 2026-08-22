@@ -101,6 +101,15 @@ def build_drift_baseline(data: pd.DataFrame, features: Iterable[str], bins: int 
     return baseline
 
 
+def _histogram_counts_with_overflow(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
+    """Count values in baseline bins, assigning under/overflow to edge bins."""
+    if len(edges) < 2 or not np.all(np.diff(edges) > 0):
+        raise ValueError("Drift baseline contains invalid histogram bin edges.")
+    clipped = np.clip(values, edges[0], edges[-1])
+    counts, _ = np.histogram(clipped, bins=edges)
+    return counts
+
+
 def drift_report(data: pd.DataFrame, baseline: Mapping[str, Any], psi_alert: float = 0.2) -> dict[str, Any]:
     """Compare new feature data with a saved baseline using population stability index."""
     if psi_alert <= 0:
@@ -113,7 +122,9 @@ def drift_report(data: pd.DataFrame, baseline: Mapping[str, Any], psi_alert: flo
         values = pd.to_numeric(data[feature], errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
         edges = np.asarray(reference["edges"], dtype=float)
         expected = np.asarray(reference["proportions"], dtype=float)
-        counts, _ = np.histogram(values, bins=edges)
+        counts = _histogram_counts_with_overflow(values.to_numpy(dtype=float), edges)
+        if len(expected) != len(counts):
+            raise ValueError(f"Drift baseline has inconsistent bin proportions for feature {feature!r}.")
         actual = counts / counts.sum() if counts.sum() else np.zeros_like(expected)
         epsilon = 1e-6
         psi = float(np.sum((actual - expected) * np.log((actual + epsilon) / (expected + epsilon))))
